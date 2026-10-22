@@ -42,10 +42,14 @@ with tempfile.TemporaryDirectory(prefix='doom-native-') as folder:
                              '--extensions', str(w / 'extensions'), *driver],
                             env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     def stats():
-        try:
-            return json.loads(statsfile.read_text())
-        except (OSError, ValueError):
-            return {}
+        # The diagnostic writer truncates before replacing each snapshot.
+        # Retry a partial read instead of treating it as a game state.
+        for _ in range(10):
+            try:
+                return json.loads(statsfile.read_text())
+            except (OSError, ValueError):
+                time.sleep(.01)
+        return {}
     def until(condition):
         end = time.monotonic() + 7
         while time.monotonic() < end and proc.poll() is None:

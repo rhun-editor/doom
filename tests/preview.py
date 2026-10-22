@@ -38,7 +38,8 @@ with tempfile.TemporaryDirectory(prefix='Doom preview é ') as tmp:
                       (dest / 'launched.ppm').as_posix() + '\nquit\n')
     extra = ['--headless', '1100x800', '--scale', '1', '--script', str(script)]
     if sys.platform == 'win32':
-        args = ['cmd', '/d', '/c', str(stage / 'Play DOOM.cmd'), *extra]
+        # CALL keeps cmd.exe from stripping the first quoted path at /C.
+        args = ['cmd', '/d', '/c', 'call', str(stage / 'Play DOOM.cmd'), *extra]
     else:
         launcher = 'Play DOOM.command' if sys.platform == 'darwin' else 'Play DOOM.sh'
         args = ['sh', str(stage / launcher), *extra]

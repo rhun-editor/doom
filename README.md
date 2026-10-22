@@ -10,8 +10,7 @@ with the separate preview downloads. It has not been submitted to the extension 
 
 ## Play without compiling
 
-Open this repository's [Releases](https://github.com/rhun-editor/doom/releases). While the
-repository is private, sign in to GitHub with an account that has access to download the files.
+Open this repository's [Releases](https://github.com/rhun-editor/doom/releases).
 
 Download and extract the entire **rhun-doom-preview** package for your system:
 
@@ -37,12 +36,13 @@ If you already have a rhun build with the companion audio and paired-key support
 The archive includes the native binary, all game data and licenses. `sha256sums.txt` in the
 release covers every download. Keep it beside the archive to let rhun verify it at installation.
 
-Once the repository is public, **Install from GitHub → rhun-editor/doom** also works. Private
-releases need an authenticated download followed by **From an Archive**.
+For this preview, **Install from GitHub → rhun-editor/doom@0.1.0** also works. Include the
+version: GitHub's default latest-release link excludes preview releases.
 
 Stock rhun 0.18.1 can render the game and uses short key pulses as a fallback. Full held controls
-and audio require the companion support. The source patch is `patches/rhun-local-media.patch`,
-against rhun commit `2a155fd417239e6baff8f714996472f7f96d4c01`.
+and audio require the companion support in [rhun PR #107](https://github.com/vshvedov/rhun/pull/107).
+The source patch is `patches/rhun-local-media.patch`, against rhun commit
+`2a155fd417239e6baff8f714996472f7f96d4c01`.
 
 ## Controls
 

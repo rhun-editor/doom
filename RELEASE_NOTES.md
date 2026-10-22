@@ -10,12 +10,12 @@ extension. Your normal rhun installation and settings are untouched.
 
 If you already have the experimental rhun audio/key support, install `doom-TARGET.tar.gz` through
 **Extensions → Install → From an Archive**. Keep `sha256sums.txt` beside it for verification.
-These extension archives are also the layout used by Install from GitHub when the repo is public.
+Or use **Install from GitHub → rhun-editor/doom@0.1.0**. The version is required for this preview.
 
 Click the game. WASD moves, arrows turn, Space fires, E opens doors, P pauses, and M toggles sound.
 
 This is a preview. Full controls and sound need the companion editor support; stock 0.18.1 uses
-basic key pulses. The Mac preview is not notarized. Linux needs glibc 2.35+ and PulseAudio or ALSA.
+basic key pulses. The Mac preview needs macOS 12+ and is not notarized. Linux needs glibc 2.35+ and PulseAudio or ALSA.
 Windows needs 64-bit Windows 10+. Hosted Mac/Windows CI tests audio synthesis with a test device;
 Linux CI uses a PulseAudio sink. No physical-speaker test is claimed for the hosted runners.
 
