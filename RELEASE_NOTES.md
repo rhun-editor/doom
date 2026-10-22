@@ -21,3 +21,6 @@ regular rhun download for its signed, notarized editor.
 The unchanged shareware WAD and its separate id Software license are included. It must remain
 unmodified and cannot be charged for without permission. TimGM6mb instruments and their GPL
 notice are included too. Complete source archives are provided alongside the binaries.
+
+The standalone editor's [Unicode-data notice](https://github.com/rhun-editor/doom/releases/download/v0.1.0/EDITOR-UNICODE-LICENSE.txt)
+is also provided alongside these downloads and in the editor source archive.

@@ -55,6 +55,7 @@ def main():
             '--empty --extensions "$root/extensions" "$@"\n')
         launcher.chmod(0o755)
     shutil.copy2(args.host / 'LICENSE', stage / 'EDITOR-LICENSE.txt')
+    shutil.copy2(args.host / 'assets/licenses/LICENSE-Unicode.txt', stage / 'EDITOR-UNICODE-LICENSE.txt')
     (stage / 'README.txt').write_text(
         'DOOM in rhun: separate editor preview\n\n'
         'Extract this entire folder, then run Play DOOM. No compiler or runtime is required.\n'
