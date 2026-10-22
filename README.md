@@ -26,7 +26,7 @@ music instruments. No compiler, Python, JavaScript runtime or additional downloa
 The preview leaves your installed rhun and its settings alone. Its configuration and game state
 stay inside the extracted folder. Click the game to play.
 
-The Mac preview app is not notarized. Linux needs glibc 2.35 or newer and a working PulseAudio
+The Mac preview needs macOS 12 or newer and is not notarized. Linux needs glibc 2.35 or newer and a working PulseAudio
 (or PipeWire's PulseAudio service) or ALSA installation. Windows needs 64-bit Windows 10 or newer.
 The Windows binary includes its compiler runtime and zlib, so MSYS2 is not needed to play.
 
@@ -65,8 +65,8 @@ Game**, **DOOM: Pause or Resume**, and **DOOM: Toggle Sound**.
 
 ## Build locally
 
-macOS needs the command line developer tools. Linux needs a C11 compiler, make and zlib development
-headers. Windows builds use MSYS2's MINGW64 environment with GCC, make and zlib. Dependencies are
+macOS needs the command line developer tools. Linux needs a C11 compiler and make.
+Windows builds use MSYS2's MINGW64 environment with GCC and make. Dependencies are
 vendored; no library downloads occur during compilation.
 
 ```sh

@@ -16,8 +16,9 @@ class PNG(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         library=ROOT/'build'/('png-test.dll' if sys.platform=='win32' else 'png-test.so')
-        args=shlex.split(os.environ.get('CC','clang'))+['-shared','-Isrc','src/png.c','-o',str(library)]
-        args+=['-static','-lz'] if sys.platform=='win32' else ['-fPIC','-lz']
+        args=shlex.split(os.environ.get('CC','clang'))+['-shared','-Isrc','-Ivendor/zlib','src/png.c','-o',str(library)]+[
+            'vendor/zlib/'+n+'.c' for n in ('adler32','compress','crc32','deflate','trees','zutil')]
+        args+=['-static'] if sys.platform=='win32' else ['-fPIC']
         subprocess.run(args,cwd=ROOT,check=True)
         cls.lib=ctypes.CDLL(str(library))
         cls.lib.doom_png.restype=ctypes.c_size_t

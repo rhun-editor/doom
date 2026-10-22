@@ -43,7 +43,7 @@ class Gameplay(unittest.TestCase):
         else:
             self.assertRegex(out,r'confined=[12]')
 
-    def run_case(self,name,actions,*,audio=True,wad='valid'):
+    def run_case(self,name,actions,*,audio=True,wad='valid',audio_backend=None):
         self.assertTrue(RHUN and Path(RHUN).is_file(),'Set DOOM_RHUN to the local patched editor executable.')
         with tempfile.TemporaryDirectory(prefix='rhun-doom-') as folder:
             w=Path(folder).resolve()
@@ -67,6 +67,7 @@ class Gameplay(unittest.TestCase):
                      TMPDIR=str(w/'tmp'),TEMP=str(w/'tmp'),TMP=str(w/'tmp'),
                      USERPROFILE=str(w),APPDATA=str(w/'config'),LOCALAPPDATA=str(w/'state'),
                      DOOM_DIAGNOSTICS='1')
+            if audio_backend=='native': env.pop('DOOM_AUDIO_BACKEND',None)
             args=[str(RHUN),str(w/'project'),'--headless','1100x800','--scale','1',
                   '--extensions',str(w/'extensions'),'--script',str(w/'script.rsc')]
             proc=subprocess.Popen(args,env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,start_new_session=sys.platform!='win32')
@@ -136,6 +137,16 @@ class Gameplay(unittest.TestCase):
         self.assertRegex(log,r'DOOM audio device: -[0-9]+')
         self.assertIn('DOOM ready:',log)
         self.check_confinement(out)
+
+    @unittest.skipUnless(os.environ.get('DOOM_AUDIO_BACKEND'), 'native audio is already used by this run')
+    def test_native_audio_initializes_or_fails_without_breaking_the_game(self):
+        a,out,log=self.run_case('native-audio',['cmd doom.play','wait 2200','print-views'],audio_backend='native')
+        match=re.search(r'DOOM audio device: (-?\d+) \(([^)]+)\)',log)
+        self.assertIsNotNone(match,log)
+        self.assertNotEqual(match[2],'Null')
+        self.assertIn('DOOM ready:',log)
+        self.assertIn('title=DOOM',out)
+        print('Native audio backend:',match[0])
 
     def test_released_controls_stop_movement_turning_and_firing(self):
         actions=['cmd doom.play','wait 2200','click 550 400','wait 100',

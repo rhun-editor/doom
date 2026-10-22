@@ -722,7 +722,7 @@ index f186920f..792a5bc6 100644
      mov dword ptr [rip + g_key_latin], 0
      xor eax, eax
 diff --git a/tests/ext-views-picture.py b/tests/ext-views-picture.py
-index 48d8d3b5..e3523935 100644
+index 48d8d3b5..ad9f21ce 100644
 --- a/tests/ext-views-picture.py
 +++ b/tests/ext-views-picture.py
 @@ -48,6 +48,23 @@ class Pictures(ViewsBase):
@@ -749,6 +749,15 @@ index 48d8d3b5..e3523935 100644
      def test_copy_asks_the_picture_and_paste_brings_text_to_it(self):
          (self.proj / 'note.txt').write_text('pasted words', encoding='utf-8')
          x, y = self.shown()
+@@ -71,7 +88,7 @@ class Pictures(ViewsBase):
+     def test_an_image_by_handle_is_drawn_and_goes(self):
+         x, y = self.shown()
+         shot = self.work / 'shot.ppm'
+-        out = self.run_editor(['view-show pic', 'wait 300', 'cmd viewfake.img', 'wait 400', f'shot {shot}',
++        out = self.run_editor(['view-show pic', 'wait 300', 'cmd viewfake.img', 'wait 400', f'shot {shot.as_posix()}',
+                                'cmd viewfake.unimg', 'wait 300'])
+         data = shot.read_bytes()
+         # P6 header: "P6\nW H\n255\n"
 diff --git a/tests/ext/viewfake.py b/tests/ext/viewfake.py
 index a2117c12..f8701ab7 100644
 --- a/tests/ext/viewfake.py

@@ -1,3 +1,4 @@
 # Preserve upstream formatting and unified-diff context.
 vendor/** -whitespace
+licenses/** -whitespace
 *.patch -whitespace

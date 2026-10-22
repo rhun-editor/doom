@@ -61,3 +61,16 @@ the GPL text is in `LICENSE`. The SoundFont itself is its editable source and is
 unchanged in both the source repository and binary packages.
 
 SoundFont SHA-256: `c5378b62028c920cb11e4803327983fee2f2cdff5dc89c708e39da417e51c854`.
+
+## PNG compression and compiler runtime
+
+The required compression source from zlib 1.3.2 is vendored in `vendor/zlib`, unchanged, at
+upstream commit `da607da739fa6047df13e66a2af6b8bec7c2a498` from https://github.com/madler/zlib.
+Its zlib license is retained and included in binary packages. Compression is built from these
+same sources on all platforms, with no separate zlib runtime DLL.
+
+Windows binaries are built with MinGW-w64 GCC and statically include required compiler runtime
+support. `licenses/GCC-RUNTIME-EXCEPTION.txt` preserves GCC's Runtime Library Exception 3.1;
+`licenses/GPL-3.0.txt` accompanies it. The exception permits combining eligible compiled code
+with independently licensed code. This does not change the game data's separate terms or the
+engine and extension's GPL-2.0-or-later license.

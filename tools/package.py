@@ -24,8 +24,8 @@ def layout(target, dest):
     (dest / 'bin').mkdir(exist_ok=True)
     shutil.copy2(ROOT / 'bin' / binary, dest / 'bin' / binary)
     (dest / 'bin' / binary).chmod(0o755)
-    (dest / 'licenses').mkdir(exist_ok=True)
-    for library in ('miniaudio', 'tinysoundfont'):
+    shutil.copytree(ROOT / 'licenses', dest / 'licenses', dirs_exist_ok=True)
+    for library in ('miniaudio', 'tinysoundfont', 'zlib'):
         shutil.copy2(ROOT / 'vendor' / library / 'LICENSE', dest / 'licenses' / (library + '.txt'))
     commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     (dest / 'SOURCE.txt').write_text(
