@@ -4,6 +4,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   build:
     strategy:
@@ -16,6 +19,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 35
     steps:
+      - name: Preserve source and patch line endings
+        shell: bash
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
@@ -31,7 +37,9 @@ jobs:
           cache: false
       - name: Linux build and audio tools
         if: runner.os == 'Linux'
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq clang zlib1g-dev pulseaudio libpulse0 libasound2 xvfb xdotool openbox
+        run: |
+          sudo apt-get update -qq -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20
+          sudo apt-get install -y -qq clang zlib1g-dev pulseaudio libpulse0 libasound2 xvfb xdotool openbox
       - uses: msys2/setup-msys2@v2
         if: runner.os == 'Windows'
         with:
@@ -47,7 +55,9 @@ jobs:
           'CC=C:/msys64/mingw64/bin/gcc.exe' | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Apply the companion editor support
         shell: bash
-        run: git -C build/rhun-host apply "$GITHUB_WORKSPACE/patches/rhun-local-media.patch"
+        run: |
+          git -C build/rhun-host apply "$GITHUB_WORKSPACE/patches/rhun-local-media.patch"
+          echo '0.18.1-doom-preview' > build/rhun-host/VERSION
       - name: Build Unix editor and extension
         if: runner.os != 'Windows'
         shell: bash
@@ -87,11 +97,11 @@ jobs:
         run: python tools/package.py ${{ matrix.target }}
       - name: Test the packaged binary in the native editor
         env:
-          DOOM_PACKAGE_ROOT: ${{ github.workspace }}/build/package/${{ matrix.target }}
+          DOOM_PACKAGE_ROOT: ${{ github.workspace }}/build/package/${{ matrix.target }}/doom
         run: python tests/run.py
       - name: Protocol conformance on the package
         env:
-          DOOM_PACKAGE_ROOT: ${{ github.workspace }}/build/package/${{ matrix.target }}
+          DOOM_PACKAGE_ROOT: ${{ github.workspace }}/build/package/${{ matrix.target }}/doom
           DOOM_DIAGNOSTICS: '1'
           DOOM_AUDIO_BACKEND: 'null'
         run: python tools/check.py
@@ -99,6 +109,13 @@ jobs:
         env:
           RHUN_TEST_EXE: ${{ env.DOOM_RHUN }}
         run: python build/rhun-host/tests/ext-views-picture.py
+      - name: Package the separate editor preview
+        run: python tools/package-preview.py ${{ matrix.target }}
+      - name: Test the extracted preview launcher
+        run: python tests/preview.py
+      - name: Complete corresponding source archives
+        if: runner.os == 'Linux'
+        run: python tools/source-archives.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -108,3 +125,42 @@ jobs:
         with:
           name: package-${{ matrix.target }}
           path: dist/*
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: package-*
+          path: dist
+          merge-multiple: true
+      - name: Check version, packages and checksums
+        run: |
+          set -e
+          test "${GITHUB_REF_NAME#v}" = "$(sed -n 's/^version *= *//p' extension.ini)"
+          test -s dist/doom-macos-arm64.tar.gz
+          test -s dist/doom-linux-x86_64.tar.gz
+          test -s dist/doom-windows-x64.tar.gz
+          test -s dist/rhun-doom-preview-macos-arm64.zip
+          test -s dist/rhun-doom-preview-linux-x86_64.tar.gz
+          test -s dist/rhun-doom-preview-windows-x64.zip
+          test -s dist/doom-source.tar.gz
+          test -s dist/rhun-preview-source.tar.gz
+          (cd dist && sha256sum *.tar.gz *.zip > sha256sums.txt && sha256sum -c sha256sums.txt)
+      - uses: actions/attest-build-provenance@v2
+        if: github.event.repository.private == false
+        with:
+          subject-path: dist/doom-*.tar.gz
+      - name: Publish the tested preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* --draft --prerelease \
+            --title "DOOM in rhun $GITHUB_REF_NAME (preview)" --notes-file RELEASE_NOTES.md
+          gh release edit "$GITHUB_REF_NAME" --draft=false

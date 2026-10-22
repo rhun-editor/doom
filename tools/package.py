@@ -51,7 +51,7 @@ def main():
     ap.add_argument('--layout', type=Path)
     ap.add_argument('--out', type=Path, default=ROOT / 'dist')
     args = ap.parse_args()
-    stage = args.layout or ROOT / 'build/package' / args.target
+    stage = args.layout or ROOT / 'build/package' / args.target / 'doom'
     if stage.exists():
         shutil.rmtree(stage)
     layout(args.target, stage)
