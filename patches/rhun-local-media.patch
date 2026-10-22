@@ -167,7 +167,7 @@ index a44d7324..bb466109 100644
      .quad .Lc_cmd, c_cmd, .Lc_shot, c_shot, .Lc_wait, c_wait, .Lc_resize, c_resize
      .quad .Lc_quit, c_quit, .Lc_echo, c_echo, .Lc_print_doc, c_print_doc
 diff --git a/src/app/ext.s b/src/app/ext.s
-index 8f6627ab..3328bf18 100644
+index 8f6627ab..632ee369 100644
 --- a/src/app/ext.s
 +++ b/src/app/ext.s
 @@ -2674,7 +2674,15 @@ parse_needs:
@@ -175,7 +175,7 @@ index 8f6627ab..3328bf18 100644
      call needs_yes
      jmp 9f
 -10: # notebooks: kernels = the programs rhun may start as the user for its notebooks (nbexec.s)
-+10: mov rdi, r12                # audio output, without microphone access
++10: mov rdi, r12                # local audio services; platform access is documented in v1.1
 +    lea rsi, [rip + .Ln_audio]
 +    call ini_key_is
 +    test eax, eax
@@ -651,7 +651,7 @@ index 033bec00..34e0a4c0 100644
  
  .equ EXT_MAX_RUNNING, EXT_CAP
 diff --git a/src/win/window.s b/src/win/window.s
-index f186920f..792a5bc6 100644
+index f186920f..c24a52e7 100644
 --- a/src/win/window.s
 +++ b/src/win/window.s
 @@ -438,6 +438,10 @@ FN win_deferred_push
@@ -676,15 +676,17 @@ index f186920f..792a5bc6 100644
      cmp r12d, 0x102
      je .Lwm_char
      cmp r12d, 0x106
-@@ -780,6 +788,8 @@ win_wndproc_deferred:
+@@ -780,7 +788,9 @@ win_wndproc_deferred:
      call win_mods
  8:
      mov r15d, eax
+-    test eax, MOD_ALT
 +    mov edi, eax
 +    call viewpic_modifiers
-     test eax, MOD_ALT
++    test r15d, MOD_ALT
      jz 9f
      cmp r13d, 115              # Alt+F4 belongs to Windows
+     je .Lwm_default
 @@ -826,6 +836,35 @@ win_wndproc_deferred:
      xor esi, esi
      mov edx, r15d
