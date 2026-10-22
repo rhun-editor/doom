@@ -61,7 +61,7 @@ def main():
         'On Linux, run ./"Play DOOM.sh". On macOS, the preview editor is not notarized.\n'
         'Your regular editor is not replaced. Preview settings stay in config/ and state/.\n'
         'Click the game. WASD move, arrows turn, Space fires, E opens doors, P pauses.\n\n'
-        'The editor includes experimental paired-key and audio support.\n'
+        'The bundled editor provides paired-key and audio support.\n'
         'Windows extensions are not sandboxed by rhun. Linux audio permission includes local\n'
         'audio-service access. This extension uses playback only.\n'
         'See extensions/rhun-editor/doom/data/ for the shareware and SoundFont notices.\n'

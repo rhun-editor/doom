@@ -26,7 +26,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: vshvedov/rhun
-          ref: 2a155fd417239e6baff8f714996472f7f96d4c01
+          ref: v0.18.2
           path: build/rhun-host
       - uses: actions/setup-python@v5
         with:
@@ -53,11 +53,6 @@ jobs:
           echo "$(cygpath -m /mingw64/bin)" >> "$GITHUB_PATH"
           echo "LLVM_BIN=$(cygpath -m /mingw64/bin)" >> "$GITHUB_ENV"
           echo "CC=$(cygpath -m /mingw64/bin/gcc.exe)" >> "$GITHUB_ENV"
-      - name: Apply the companion editor support
-        shell: bash
-        run: |
-          git -C build/rhun-host apply "$GITHUB_WORKSPACE/patches/rhun-local-media.patch"
-          echo '0.18.1-doom-preview' > build/rhun-host/VERSION
       - name: Build Unix editor and extension
         if: runner.os != 'Windows'
         shell: bash
@@ -167,10 +162,12 @@ jobs:
         if: github.event.repository.private == false
         with:
           subject-path: dist/doom-*.tar.gz
-      - name: Publish the tested preview
+      - name: Publish the tested release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/* --draft --prerelease \
-            --title "DOOM in rhun $GITHUB_REF_NAME (preview)" --notes-file RELEASE_NOTES.md
+          pre=
+          case "$GITHUB_REF_NAME" in *-*) pre=--prerelease ;; esac
+          gh release create "$GITHUB_REF_NAME" dist/* --draft $pre \
+            --title "DOOM in rhun $GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md
           gh release edit "$GITHUB_REF_NAME" --draft=false
