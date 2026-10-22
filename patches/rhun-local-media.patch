@@ -1,0 +1,447 @@
+diff --git a/docs/extensions/v1.1.md b/docs/extensions/v1.1.md
+index ff2ee1f7..441c7b61 100644
+--- a/docs/extensions/v1.1.md
++++ b/docs/extensions/v1.1.md
+@@ -4195,3 +4195,20 @@ SDKs: Rust `Handler::resolve_debug(&DebugResolve) -> Resolved` (`Unchanged`, `Co
+ `Refuse`); Go `DebugResolver.ResolveDebug` (nil to launch unchanged, `ErrDebugCancelled`, any other
+ error refuses; `req.Context` ends with `0 cancel`); C the `debug_resolve` handler (0, 1 with `out`,
+ -1 with `why`, -2). `rhun-ext-check` asks every `resolve = yes` debugger once per template section.
++
++## Audio output (experimental local build)
++
++`[needs] audio = yes` permits playback through the system audio output. It does not permit
++microphone capture. On macOS this grants the Core Audio output services and AudioIO shared
++memory needed by AudioQueue and Audio Units. The permission is shown at installation and on
++the extension page, and adding it during an update triggers the existing wider-access review.
++Older hosts ignore this key, so extensions must handle unavailable audio gracefully.
++
++## Paired picture keys (experimental macOS local build)
++
++`view-key-state` requires `views` and `view-keys`. In this local macOS implementation it adds
++`0 view VIEW key-up MODS NAME` paired with the existing key event, and
++`0 view VIEW mods MODS` when modifiers change. Key repeats remain ordinary key events.
++Window activation sends the focused picture `focus 1` or `focus 0`. Extensions must clear
++held keys on focus loss and closure. Bound editor commands keep their keys. Older hosts
++do not negotiate this feature; extensions may fall back to short key pulses.
+diff --git a/src/app/app.s b/src/app/app.s
+index 7808dcb5..2f663bc6 100644
+--- a/src/app/app.s
++++ b/src/app/app.s
+@@ -2302,6 +2302,8 @@ FN wheel_xy
+ FN app_on_focus
+     mov [rip + g_win_focused], edi
+     push rdi
++    call viewpic_window_focus
++    mov edi, [rsp]
+     call keys_chord_cancel
+     # files may have changed while away
+     test edi, edi
+diff --git a/src/app/confine.s b/src/app/confine.s
+index 8361bde8..48462155 100644
+--- a/src/app/confine.s
++++ b/src/app/confine.s
+@@ -670,6 +670,12 @@ profile_build:
+     lea rdi, [rip + conf_profile]
+     lea rsi, [rip + .Lsb_head]
+     call sb_push_cstr
++    test dword ptr [rbx + EXT_needs], NEEDS_AUDIO
++    jz 90f
++    lea rdi, [rip + conf_profile]
++    lea rsi, [rip + .Lsb_audio]
++    call sb_push_cstr
++90:
+     # the extension folder, its script and its state folder
+     mov rdi, [rbx + EXT_dir]
+     lea rsi, [rip + .Lsb_ro]
+@@ -1569,6 +1575,7 @@ tree_marks: .quad .Lt_lib, .Lt_libexec, .Lt_pkg, .Lt_frameworks, 0
+     .ascii "(allow file-read* (subpath \"/usr\") (subpath \"/System\") (subpath \"/Library\") (subpath \"/private/etc\") (subpath \"/dev\") (literal \"/\") (subpath \"/opt\") (subpath \"/nix\"))\n"
+     .ascii "(allow file-write* (literal \"/dev/null\") (literal \"/dev/stdout\") (literal \"/dev/stderr\"))\n"
+     .asciz "(allow file-read* (literal \"/dev/null\") (literal \"/dev/urandom\") (literal \"/dev/random\") (literal \"/dev/tty\"))\n"
++.Lsb_audio: .asciz "(allow mach-lookup (global-name \"com.apple.audio.AudioComponentPrefs\") (global-name \"com.apple.audio.AudioComponentRegistrar\") (global-name \"com.apple.audio.AudioSession\") (global-name \"com.apple.audio.audiohald\") (global-name \"com.apple.audio.coreaudiod\") (global-name \"com.apple.mediaexperience.endpoint.xpc\"))\n(allow ipc-posix-shm-read* ipc-posix-shm-write-data (ipc-posix-name-prefix \"AudioIO\"))\n(allow iokit-open-user-client (require-all (iokit-connection \"AppleHDAEngineOutput\") (iokit-user-client-class \"IOAudioControlUserClient\" \"IOAudioEngineUserClient\")))\n"
+ .Lsb_ro: .asciz "(allow file-read* (subpath \"%s\"))\n"
+ .Lsb_ro_lit: .asciz "(allow file-read* (literal \"%s\"))\n"
+ .Lsb_rw: .asciz "(allow file-read* file-write* (subpath \"%s\"))\n"
+diff --git a/src/app/control.s b/src/app/control.s
+index a44d7324..bb466109 100644
+--- a/src/app/control.s
++++ b/src/app/control.s
+@@ -209,6 +209,18 @@ c_key:
+ 1:  xor eax, eax
+     ret
+ 
++c_key_up:
++    mov rdi, rbx
++    mov rsi, r12
++    call parse_combo
++    test eax, eax
++    jz 1f
++    mov edi, eax
++    mov esi, edx
++    call viewpic_key_up
++1:  xor eax, eax
++    ret
++
+ c_type:
+     push r13
+     push r14
+@@ -2251,6 +2263,7 @@ sev_words: .quad .Lsw_error, .Lsw_warning, .Lsw_info, .Lsw_hint
+ .Ls_focus: .asciz " focus="
+ .Ls_vim: .asciz " vim="
+ .Ls_theme: .asciz " theme="
++.Lc_key_up: .asciz "key-up"
+ .Lc_key: .asciz "key"
+ .Lc_type: .asciz "type"
+ .Lc_move: .asciz "move"
+@@ -2397,7 +2410,7 @@ ctl_tables:
+     .quad submitext_ctl         # Submit to Index (submitext.s)
+     .quad 0
+ ctl_table:
+-    .quad .Lc_key, c_key, .Lc_type, c_type, .Lc_move, c_move, .Lc_click, c_click, .Lc_tap, c_tap
++    .quad .Lc_key_up, c_key_up, .Lc_key, c_key, .Lc_type, c_type, .Lc_move, c_move, .Lc_click, c_click, .Lc_tap, c_tap
+     .quad .Lc_down, c_down, .Lc_up, c_up, .Lc_updown, c_updown, .Lc_scroll, c_scroll, .Lc_open, c_open
+     .quad .Lc_cmd, c_cmd, .Lc_shot, c_shot, .Lc_wait, c_wait, .Lc_resize, c_resize
+     .quad .Lc_quit, c_quit, .Lc_echo, c_echo, .Lc_print_doc, c_print_doc
+diff --git a/src/app/ext.s b/src/app/ext.s
+index 8f6627ab..3328bf18 100644
+--- a/src/app/ext.s
++++ b/src/app/ext.s
+@@ -2674,7 +2674,15 @@ parse_needs:
+     mov edi, NEEDS_SECRETS
+     call needs_yes
+     jmp 9f
+-10: # notebooks: kernels = the programs rhun may start as the user for its notebooks (nbexec.s)
++10: mov rdi, r12                # audio output, without microphone access
++    lea rsi, [rip + .Ln_audio]
++    call ini_key_is
++    test eax, eax
++    jz 11f
++    mov edi, NEEDS_AUDIO
++    call needs_yes
++    jmp 9f
++11: # notebooks: kernels = the programs rhun may start as the user for its notebooks (nbexec.s)
+     mov rdi, r12
+     lea rsi, [rip + .Ln_kernels]
+     call ini_key_is
+@@ -5360,6 +5368,7 @@ ext_target: .asciz "linux-x86_64"
+ .Ln_network: .asciz "network"
+ .Ln_terminal: .asciz "terminal"
+ .Ln_run: .asciz "run"
++.Ln_audio: .asciz "audio"
+ .Ln_secrets: .asciz "secrets"
+ .Ln_git: .asciz "git"
+ .Ln_kernels: .asciz "kernels"           # notebooks
+diff --git a/src/app/extindexfile.s b/src/app/extindexfile.s
+index 026eecfb..1d2e16de 100644
+--- a/src/app/extindexfile.s
++++ b/src/app/extindexfile.s
+@@ -1105,6 +1105,7 @@ FN extindex_count
+ .Ln_project_read: .asciz "project=read"
+ .Ln_project_write: .asciz "project=write"
+ .Ln_home_read: .asciz "home=read"
++.Ln_audio: .asciz "audio=yes"
+ .Ln_network: .asciz "network=yes"
+ .Ln_terminal: .asciz "terminal=yes"
+ .Lsh: .asciz "/bin/sh"
+@@ -1132,7 +1133,7 @@ xi_search_fields:
+ xi_needs_map:
+     .quad .Ln_documents_read, NEEDS_DOC_READ, .Ln_documents_write, NEEDS_DOC_READ | NEEDS_DOC_WRITE
+     .quad .Ln_project_read, NEEDS_PROJECT_READ, .Ln_project_write, NEEDS_PROJECT_READ | NEEDS_PROJECT_WRITE
+-    .quad .Ln_home_read, NEEDS_HOME_READ, .Ln_network, NEEDS_NETWORK, .Ln_terminal, NEEDS_TERMINAL, 0, 0
++    .quad .Ln_home_read, NEEDS_HOME_READ, .Ln_network, NEEDS_NETWORK, .Ln_terminal, NEEDS_TERMINAL, .Ln_audio, NEEDS_AUDIO, 0, 0
+ # the fetch: fixed text, the base and the cache file as arguments; index.ini from rhun-editor/extensions'
+ # latest release, checked against its sha256sums.txt, replaces the cache. The last line is "ok", or why
+ index_script:
+diff --git a/src/app/extpage.s b/src/app/extpage.s
+index caa61412..f38f4e55 100644
+--- a/src/app/extpage.s
++++ b/src/app/extpage.s
+@@ -1816,7 +1816,11 @@ FN ext_needs_words
+     test r13d, NEEDS_SECRETS
+     jz 82f
+     call item
+-82: mov rsi, [rbx + EXT_nb_kernels]  # notebooks: kernels run as the user
++82: lea rsi, [rip + .Ln_audio]
++    test r13d, NEEDS_AUDIO
++    jz 83f
++    call item
++83: mov rsi, [rbx + EXT_nb_kernels]  # notebooks: kernels run as the user
+     test rsi, rsi
+     jz 81f
+     cmp byte ptr [rsi], 0
+@@ -3353,6 +3357,7 @@ badge_colors: .long 0xff4f7fd9, 0xff3f9f6f, 0xffd9803f, 0xff9a6ad6, 0xffcf5050,
+ .Ln_runs: .asciz "run "
+ .Ln_kernels: .asciz "run notebook kernels as you: "
+ .Ln_nothing: .asciz "only use its own commands and settings"
++.Ln_audio: .asciz "play audio through your speakers (no microphone)"
+ .Ln_secrets: .asciz "store passwords and tokens in your keychain"
+ .Ln_sep: .asciz ", "
+ .Lt_intro: .asciz "Extensions add commands, marks and tools to rhun. Each one gets only the access it asks for."
+diff --git a/src/app/extrecord.s b/src/app/extrecord.s
+index e415149c..cfd38792 100644
+--- a/src/app/extrecord.s
++++ b/src/app/extrecord.s
+@@ -828,7 +828,7 @@ FN ext_needs_wider
+     jmp 5b
+ 6:  # a bit no phrase names: wider all the same
+     mov eax, r15d
+-    and eax, ~(NEEDS_DOC_READ | NEEDS_DOC_WRITE | NEEDS_PROJECT_READ | NEEDS_PROJECT_WRITE | NEEDS_HOME_READ | NEEDS_NETWORK | NEEDS_TERMINAL | NEEDS_TERM_RUN | NEEDS_TERM_INPUT | NEEDS_TERM_OUTPUT | NEEDS_GIT_READ | NEEDS_DEBUG | NEEDS_SECRETS)
++    and eax, ~(NEEDS_DOC_READ | NEEDS_DOC_WRITE | NEEDS_PROJECT_READ | NEEDS_PROJECT_WRITE | NEEDS_HOME_READ | NEEDS_NETWORK | NEEDS_TERMINAL | NEEDS_TERM_RUN | NEEDS_TERM_INPUT | NEEDS_TERM_OUTPUT | NEEDS_GIT_READ | NEEDS_DEBUG | NEEDS_SECRETS | NEEDS_AUDIO)
+     jz 7f
+     lea rsi, [rip + .Ln_more]
+     call wider_item
+@@ -1283,6 +1283,7 @@ put_num:
+ .Ln_term_output: .asciz "read what they show and what you type there"
+ .Ln_git: .asciz "read the project's Git history"
+ .Ln_debug: .asciz "start debug adapters that run as you"
++.Ln_audio: .asciz "play audio through your speakers (no microphone)"
+ .Ln_secrets: .asciz "store passwords and tokens in your keychain"
+ .Ln_more: .asciz "use more of your system"
+ .p2align 3
+@@ -1290,7 +1291,7 @@ put_num:
+ wider_bits:
+     .quad NEEDS_HOME_READ, .Ln_home, NEEDS_NETWORK, .Ln_net, NEEDS_TERMINAL, .Ln_terminal
+     .quad NEEDS_TERM_RUN, .Ln_term_run, NEEDS_TERM_INPUT, .Ln_term_input, NEEDS_TERM_OUTPUT, .Ln_term_output
+-    .quad NEEDS_GIT_READ, .Ln_git, NEEDS_DEBUG, .Ln_debug, NEEDS_SECRETS, .Ln_secrets, 0, 0
++    .quad NEEDS_GIT_READ, .Ln_git, NEEDS_DEBUG, .Ln_debug, NEEDS_SECRETS, .Ln_secrets, NEEDS_AUDIO, .Ln_audio, 0, 0
+ .Ln_when_kernels: .asciz " with your access as notebook kernels"
+ .Ln_sep: .asciz ", "
+ .Leq: .asciz " = "
+diff --git a/src/app/viewpic.s b/src/app/viewpic.s
+index 6de69a38..74110ff4 100644
+--- a/src/app/viewpic.s
++++ b/src/app/viewpic.s
+@@ -463,6 +463,96 @@ keys_on:
+     movzx eax, al
+ 9:  ret
+ 
++# Paired key releases for a focused picture. No global keyboard access.
++FN viewpic_key_up
++    PROLOGUE
++    mov r12d, edi
++    mov r13d, esi
++    call views_focused_picture
++    mov rbx, rax
++    mov rdi, rax
++    call keys_on
++    test eax, eax
++    jz 9f
++    mov rcx, [rbx + VW_ext]
++    FEAT_TEST rcx, FEAT_VIEW_KEY_STATE
++    jz 9f
++    mov edi, r12d
++    call key_name
++    test rax, rax
++    jz 9f
++    mov r14, rax
++    mov rdi, rbx
++    call extview_event_head
++    test eax, eax
++    jz 9f
++    call extview_evbuf
++    mov rdi, rax
++    lea rsi, [rip + .Le_key_up]
++    call sb_push_cstr
++    call extview_evbuf
++    mov rdi, rax
++    mov esi, r13d
++    call viewpic_push_mods
++    call extview_evbuf
++    mov rdi, rax
++    mov esi, ' '
++    call sb_push_byte
++    call extview_evbuf
++    mov rdi, rax
++    mov rsi, r14
++    call sb_push_cstr
++    mov rdi, rbx
++    call extview_event_send
++9:  EPILOGUE
++
++FN viewpic_modifiers
++    PROLOGUE
++    mov r12d, edi
++    call views_focused_picture
++    mov rbx, rax
++    mov rdi, rax
++    call keys_on
++    test eax, eax
++    jz 9f
++    mov rcx, [rbx + VW_ext]
++    FEAT_TEST rcx, FEAT_VIEW_KEY_STATE
++    jz 9f
++    mov rdi, rbx
++    call extview_event_head
++    test eax, eax
++    jz 9f
++    call extview_evbuf
++    mov rdi, rax
++    lea rsi, [rip + .Le_modifiers]
++    call sb_push_cstr
++    call extview_evbuf
++    mov rdi, rax
++    mov esi, r12d
++    call viewpic_push_mods
++    mov rdi, rbx
++    call extview_event_send
++9:  EPILOGUE
++
++FN viewpic_window_focus
++    PROLOGUE
++    mov r12d, edi
++    call views_focused_picture
++    test rax, rax
++    jz 9f
++    mov rbx, rax
++    mov rdi, rbx
++    call keys_on
++    test eax, eax
++    jz 9f
++    mov rcx, [rbx + VW_ext]
++    FEAT_TEST rcx, FEAT_VIEW_KEY_STATE
++    jz 9f
++    mov rdi, rbx
++    mov esi, r12d
++    call viewpic_focus_event
++9:  EPILOGUE
++
+ # viewpic_key(VW*, keysym, cp, mods) -> eax 1 when the picture took the key: keys a binding takes
+ #   are left to it, except copy, cut and select_all, which reach the picture
+ FN viewpic_key
+@@ -874,9 +964,18 @@ FN views_features_agreed
+     jnz 2f
+     FEAT_CLEAR rdi, FEAT_VIEW_KEYS
+     FEAT_CLEAR rdi, FEAT_VIEW_IMAGES
+-2:  ret
++2:  FEAT_TEST rdi, FEAT_VIEW_KEYS
++    jnz 3f
++    FEAT_CLEAR rdi, FEAT_VIEW_KEY_STATE
++3:
++.ifndef MACOS
++    FEAT_CLEAR rdi, FEAT_VIEW_KEY_STATE
++.endif
++    ret
+ 
+ .section .rodata
++.Le_key_up: .asciz "key-up "
++.Le_modifiers: .asciz "mods "
+ .Le_key: .asciz "key "
+ .Le_text: .asciz "text "
+ .Le_paste: .asciz "paste "
+diff --git a/src/mac/cocoa.s b/src/mac/cocoa.s
+index 8db47fdd..424b6352 100644
+--- a/src/mac/cocoa.s
++++ b/src/mac/cocoa.s
+@@ -1243,6 +1243,40 @@ ns_mods:
+ 3:  mov w0, w9
+     ret
+ 
++// Paired releases for extension pictures that negotiated view-key-state.
++v_keyUp:
++    IMP
++    mov x19, x2
++    mov x0, x19
++    MSG modifierFlags
++    bl ns_mods
++    mov w20, w0
++    mov x0, x19
++    MSG keyCode
++    and w21, w0, #0xffff
++    cmp w21, #128
++    b.hs 2f
++    ADR x9, special_keys
++    ldr w22, [x9, w21, uxtw #2]
++    cbnz w22, 3f
++2:  mov w0, w21
++    mov w1, #0
++    bl ascii_key
++    mov w22, w0
++3:  cbz w22, 4f
++    mov w0, w22
++    mov w1, w20
++    XCALL viewpic_key_up
++4:  IMPRET
++
++v_flagsChanged:
++    IMP
++    mov x0, x2
++    MSG modifierFlags
++    bl ns_mods
++    XCALL viewpic_modifiers
++    IMPRET
++
+ // keyDown:(event)
+ v_keyDown:
+     IMP 48
+@@ -2211,8 +2245,8 @@ view_methods:
+     METHOD mouseDownCanMoveWindow, v_no, t_B
+     METHOD wantsUpdateLayer, v_yes, t_B
+     METHOD keyDown_, v_keyDown, t_v_id
+-    METHOD keyUp_, v_doCommand, t_v_id
+-    METHOD flagsChanged_, v_doCommand, t_v_id
++    METHOD keyUp_, v_keyUp, t_v_id
++    METHOD flagsChanged_, v_flagsChanged, t_v_id
+     METHOD mouseDown_, v_mouseDown, t_v_id
+     METHOD mouseUp_, v_mouseUp, t_v_id
+     METHOD mouseDragged_, v_mouseMoved, t_v_id
+diff --git a/src/rhun.inc b/src/rhun.inc
+index 033bec00..bdb67c1b 100644
+--- a/src/rhun.inc
++++ b/src/rhun.inc
+@@ -1716,6 +1716,7 @@ ENDSTRUCT TF_SIZE
+     FEATURE FEAT_QUICK_INPUT, "quick-input", 0    # views group: quick, quick-set, quick-close (quick.s)
+     FEATURE FEAT_VIEW_DOC, "view-doc", 0          # views group: doc views (rdoc.s, markdown.s)
+     FEATURE FEAT_MARKDOWN, "markdown", 0          # views group: Markdown in node tooltips and notification messages
++    FEATURE FEAT_VIEW_KEY_STATE, "view-key-state", 0 # paired key releases and window focus (macOS)
+ .endm
+ # extproto.s sets FEATURE_NAMES and expands the list again as its name table
+ .macro FEATURE sym, name, asks
+@@ -2486,6 +2487,7 @@ ENDSTRUCT XK_SIZE
+ .equ NEEDS_NETWORK, 32
+ .equ NEEDS_TERMINAL, 64
+ .equ NEEDS_GIT_READ, 128        # [needs] git = read: the project's Git data through rhun (gitdata.s)
++.equ NEEDS_AUDIO, 0x2000000      # play audio; no microphone access
+ .equ NEEDS_SECRETS, 0x1000000      # resources group: [needs] secrets = yes
+ 
+ .equ EXT_MAX_RUNNING, EXT_CAP
+diff --git a/tests/ext-views-picture.py b/tests/ext-views-picture.py
+index 48d8d3b5..3e30a45b 100644
+--- a/tests/ext-views-picture.py
++++ b/tests/ext-views-picture.py
+@@ -48,6 +48,24 @@ class Pictures(ViewsBase):
+         self.assertIn(f'0 view {PIC} key - Insert', log)    # F-keys have bindings
+         self.assertIn(f'0 view {PIC} selectall', log)
+ 
++    @unittest.skipUnless(sys.platform == 'darwin', 'initial paired-key implementation is macOS')
++    def test_paired_releases_and_window_focus_are_opt_in(self):
++        self.env['VIEWFAKE_KEY_STATE'] = '1'
++        x, y = self.shown()
++        self.run_editor(['view-show pic', 'wait 300', f'click {x + 50} {y + 30}',
++                         'key w', 'key-up w', 'focus out', 'focus in', 'wait 100'])
++        log = self.fake_log()
++        self.assertIn(f'0 view {PIC} key - w', log)
++        self.assertIn(f'0 view {PIC} key-up - w', log)
++        self.assertIn(f'0 view {PIC} focus 0', log)
++        self.assertIn(f'0 view {PIC} focus 1', log)
++
++    def test_legacy_picture_does_not_receive_key_releases(self):
++        x, y = self.shown()
++        self.run_editor(['view-show pic', 'wait 300', f'click {x + 50} {y + 30}',
++                         'key w', 'key-up w', 'wait 100'])
++        self.assertFalse(any(' key-up ' in line for line in self.fake_log()))
++
+     def test_copy_asks_the_picture_and_paste_brings_text_to_it(self):
+         (self.proj / 'note.txt').write_text('pasted words', encoding='utf-8')
+         x, y = self.shown()
+diff --git a/tests/ext/viewfake.py b/tests/ext/viewfake.py
+index a2117c12..f8701ab7 100644
+--- a/tests/ext/viewfake.py
++++ b/tests/ext/viewfake.py
+@@ -548,6 +548,8 @@ def main():
+         features += ' notify progress'
+     if PIC:
+         features += ' views view-images' + ('' if PIC == 'nokeys' else ' view-keys')
++    if os.environ.get('VIEWFAKE_KEY_STATE'):
++        features += ' view-key-state'
+     if os.environ.get('VIEWFAKE_FORM'):
+         features += ' view-form'
+     if os.environ.get('VIEWFAKE_TABLE'):

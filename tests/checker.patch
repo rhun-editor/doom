@@ -1,0 +1,59 @@
+diff --git a/conformance/ext/features.go b/conformance/ext/features.go
+index c31044d..539199d 100644
+--- a/conformance/ext/features.go
++++ b/conformance/ext/features.go
+@@ -138,6 +138,11 @@ func (h *host) viewRequest(id int64, verb string, args []string, body []byte, re
+ 		}
+ 		v, _ := strconv.ParseInt(args[0], 10, 64)
+ 		if rv := h.rviews[v]; !h.views[v] && (rv == nil || rv.vkind != "picture") {
++			if h.closingViews[v] > 0 {
++				h.closingViews[v]--
++				rerr("noview", "no such view")
++				return
++			}
+ 			h.fail("views", fmt.Sprintf("draw names view %s, which is not open", args[0]))
+ 			rerr("noview", "no such view")
+ 			return
+@@ -482,7 +487,11 @@ func (h *host) checkFeatures() {
+ 			return
+ 		}
+ 		h.ok(fmt.Sprintf("its %d views take size, metrics and pointer events (%d pictures drawn)", len(h.views), h.pictures))
++		if h.closingViews == nil {
++			h.closingViews = make(map[int64]int)
++		}
+ 		for v := range h.views {
++			h.closingViews[v] = 1
+ 			h.write(fmt.Sprintf("0 view %d closed\n", v))
+ 			delete(h.views, v)
+ 		}
+diff --git a/conformance/ext/main.go b/conformance/ext/main.go
+index ffa1ef5..87510a3 100644
+--- a/conformance/ext/main.go
++++ b/conformance/ext/main.go
+@@ -263,6 +263,7 @@ type host struct {
+ 
+ 	features      map[string]bool // section 12: agreed after hello
+ 	views         map[int64]bool  // views it opened
++	closingViews  map[int64]int   // allow one synchronous draw already in flight at close
+ 	nextView      int64
+ 	pictures      int               // draw requests that passed
+ 	hostSeq       int64             // the last id of a request the checker sent
+@@ -1418,7 +1419,8 @@ func dash(s string) string {
+ 
+ // serve reads the extension's lines until it has been quiet for `quiet`, handling requests.
+ func (h *host) serve(quiet time.Duration) {
+-	for {
++	deadline := time.Now().Add(2 * time.Second) // animated views never become quiet
++	for time.Now().Before(deadline) {
+ 		m, err := h.readMessage(quiet)
+ 		if err != nil {
+ 			return
+@@ -1678,7 +1680,7 @@ func main() {
+ 			ok = v == "none" || v == "read" || v == "write"
+ 		case "home":
+ 			ok = v == "none" || v == "read"
+-		case "network", "secrets":
++		case "network", "secrets", "audio":
+ 			ok = v == "no" || v == "yes"
+ 		case "terminal": // no, yes = suggest, run, input, output (terminals and tasks)
+ 			ok = v == "no" || terminalLevel(v) > 0
