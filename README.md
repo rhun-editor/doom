@@ -15,7 +15,6 @@ Double-click **Play DOOM.command**, or run:
 
 ```sh
 make
-sh tools/fetch-shareware.sh
 DOOM_RHUN=/path/to/rhun sh tools/play-local.sh
 ```
 
@@ -58,13 +57,19 @@ The command palette also has **DOOM: New Game**, **DOOM: Pause or Resume**, and 
 
 ## Game data
 
-The source repository contains no WAD files. The fetch script downloads the unmodified Doom
-1.9 shareware episode from Debian and checks its SHA-256 hash. That IWAD contains the original
-graphics, music, sound effects and first episode. It remains copyrighted by id Software.
+The repository includes the unmodified Doom 1.9 shareware episode in `data/doom1.wad`, so no
+game-data download is needed after cloning. That IWAD contains the original graphics, music,
+sound effects and first episode. It remains copyrighted by id Software under its separate
+[shareware license](data/SHAREWARE-LICENSE.txt), which also preserves John Carmack's redistribution
+clarification. The GPL license for the engine does not apply to the game data.
 
-See [THIRD_PARTY.md](THIRD_PARTY.md) for upstream versions and separate data terms. No assets
-from the registered game or Doom II are downloaded. Game saves and settings stay in the
-extension's rhun state folder.
+See [data/README.md](data/README.md) for the source and checksum, and [THIRD_PARTY.md](THIRD_PARTY.md)
+for upstream versions and licensing. The shareware data must stay unmodified and must not be sold
+or charged for without id Software's permission. No registered Doom or Doom II assets are
+included. Game saves and settings stay in the extension's rhun state folder.
+
+If the bundled WAD is missing, `sh tools/fetch-shareware.sh` restores the same file from Debian
+and verifies its SHA-256 checksum. The local launcher also uses this fallback automatically.
 
 ## Tests
 

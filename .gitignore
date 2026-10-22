@@ -1,7 +1,7 @@
 /build/
 /bin/
 /data/*.wad
+!/data/doom1.wad
 /data/*.tar.gz
-/data/SHAREWARE-LICENSE.txt
 *.DS_Store
 /.local-rhun

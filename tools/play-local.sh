@@ -16,6 +16,7 @@ sed 's/^on = command$/on = startup/' extension.ini > "$ext/extension.ini"
 cp bin/doom-macos-arm64 "$ext/bin/doom-macos-arm64.new"
 mv "$ext/bin/doom-macos-arm64.new" "$ext/bin/doom-macos-arm64"
 cp data/doom1.wad "$ext/data/doom1.wad"
+cp data/SHAREWARE-LICENSE.txt "$ext/data/SHAREWARE-LICENSE.txt"
 cat > "$local/config/rhun/config" <<'EOF'
 [ui]
 agents_panel = false

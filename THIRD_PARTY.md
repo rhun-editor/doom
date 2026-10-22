@@ -1,6 +1,7 @@
 # Third-party code and game data
 
-The extension and Doom engine are distributed under GPL-2.0-or-later. See LICENSE.
+The extension and Doom engine are distributed under GPL-2.0-or-later. See LICENSE. The game
+data in `data/doom1.wad` has its own license, described below.
 
 ## DoomGeneric
 
@@ -28,14 +29,17 @@ per frame. Its acknowledgment is consumed by the next ordinary SDK request.
 
 ## Doom shareware data
 
-`data/doom1.wad` is deliberately excluded from Git. `tools/fetch-shareware.sh` downloads the
-unmodified Doom 1.9 shareware IWAD from Debian and verifies its SHA-256 checksum.
+`data/doom1.wad` is the unmodified Doom 1.9 shareware IWAD from Debian. It is included in the
+repository alongside `data/SHAREWARE-LICENSE.txt`, Debian's complete copyright file containing
+the original limited-use license and John Carmack's redistribution clarification. Keep that
+notice with every copy of the WAD. `data/README.md` records the source and SHA-256 checksum.
 
 The IWAD contains the original first episode's graphics, maps, sound effects and music.
-It is copyrighted by id Software and is separate from the GPL engine code. The original
-limited-use license and John Carmack's distribution clarification are reproduced by Debian:
+It is copyrighted by id Software and is separate from the GPL engine code. Debian reproduces
+the limited-use license and distribution clarification at:
 
 https://sources.debian.org/src/doom-wad-shareware/1.9.fixed-4/debian/copyright/
 
-The shareware archive is not included in source or binary packages by default. No registered
-Doom or Doom II assets are included or downloaded.
+The shareware WAD must remain unmodified and cannot be sold or charged for without id Software's
+prior written consent. It is not GPL licensed. This repository distributes it free of charge.
+No registered Doom or Doom II assets are included or downloaded.
