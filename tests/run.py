@@ -5,13 +5,17 @@ import os
 from pathlib import Path
 import re
 import shutil
+import sys
 import signal
 import subprocess
 import tempfile
 import unittest
 
 ROOT=Path(__file__).resolve().parents[1]
-BIN=ROOT/'bin/doom-macos-arm64'
+TARGET={'darwin':'macos-arm64','win32':'windows-x64'}.get(sys.platform,'linux-x86_64')
+BINARY='doom-'+TARGET+('.exe' if sys.platform=='win32' else '')
+PACKAGE=Path(os.environ.get('DOOM_PACKAGE_ROOT',ROOT))
+BIN=PACKAGE/'bin'/BINARY
 RHUN=os.environ.get('DOOM_RHUN')
 if not RHUN and (ROOT/'.local-rhun').exists(): RHUN=(ROOT/'.local-rhun').read_text().strip()
 RHUN=RHUN or shutil.which('rhun')
@@ -31,6 +35,14 @@ enabled = false
 '''
 
 class Gameplay(unittest.TestCase):
+    def check_confinement(self,out):
+        if sys.platform=='win32':
+            self.assertIn('confined=0',out)  # rhun currently has no Windows extension sandbox
+        elif os.environ.get('DOOM_ALLOW_UNCONFINED'):
+            self.assertRegex(out,r'confined=[012]')  # Docker only; native CI requires confinement
+        else:
+            self.assertRegex(out,r'confined=[12]')
+
     def run_case(self,name,actions,*,audio=True,wad='valid'):
         self.assertTrue(RHUN and Path(RHUN).is_file(),'Set DOOM_RHUN to the local patched editor executable.')
         with tempfile.TemporaryDirectory(prefix='rhun-doom-') as folder:
@@ -38,25 +50,30 @@ class Gameplay(unittest.TestCase):
             for d in ['config/rhun','state','tmp','project','extensions/rhun-editor/doom/bin','extensions/rhun-editor/doom/data']:
                 (w/d).mkdir(parents=True,exist_ok=True)
             ext=w/'extensions/rhun-editor/doom'
-            manifest=(ROOT/'extension.ini').read_text()
+            manifest=(PACKAGE/'extension.ini').read_text()
             (ext/'extension.ini').write_text(manifest if audio else manifest.replace('audio = yes\n',''))
-            shutil.copy2(BIN,ext/'bin/doom-macos-arm64')
-            if wad=='valid':shutil.copy2(ROOT/'data/doom1.wad',ext/'data/doom1.wad')
+            shutil.copy2(BIN,ext/'bin'/BINARY)
+            for asset in ('TimGM6mb.sf2','SOUNDFONT-LICENSE.txt','SHAREWARE-LICENSE.txt'):
+                shutil.copy2(PACKAGE/'data'/asset,ext/'data'/asset)
+            if wad=='valid':shutil.copy2(PACKAGE/'data/doom1.wad',ext/'data/doom1.wad')
             elif wad=='invalid':(ext/'data/doom1.wad').write_bytes(b'not a game')
             (w/'config/rhun/config').write_text(CONFIG)
             (w/'project/note.txt').write_text('Back to coding.\n')
             dest=ARTIFACTS/name;dest.mkdir(parents=True,exist_ok=True)
             script='\n'.join(['wait 100',*actions,'quit'])+'\n'
-            script=script.replace('{shot}',str(dest)).replace('{project}',str(w/'project'))
+            script=script.replace('{shot}',dest.as_posix()).replace('{project}',(w/'project').as_posix())
             (w/'script.rsc').write_text(script)
             env=dict(os.environ,HOME=str(w),XDG_CONFIG_HOME=str(w/'config'),XDG_STATE_HOME=str(w/'state'),
-                     TMPDIR=str(w/'tmp'),DOOM_DIAGNOSTICS='1')
+                     TMPDIR=str(w/'tmp'),TEMP=str(w/'tmp'),TMP=str(w/'tmp'),
+                     USERPROFILE=str(w),APPDATA=str(w/'config'),LOCALAPPDATA=str(w/'state'),
+                     DOOM_DIAGNOSTICS='1')
             args=[str(RHUN),str(w/'project'),'--headless','1100x800','--scale','1',
                   '--extensions',str(w/'extensions'),'--script',str(w/'script.rsc')]
-            proc=subprocess.Popen(args,env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,start_new_session=True)
+            proc=subprocess.Popen(args,env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,start_new_session=sys.platform!='win32')
             try:out,err=proc.communicate(timeout=40)
             except subprocess.TimeoutExpired:
-                os.killpg(proc.pid,signal.SIGKILL);proc.wait();self.fail('The editor or game stopped responding.')
+                proc.kill() if sys.platform=='win32' else os.killpg(proc.pid,signal.SIGKILL)
+                proc.wait();self.fail('The editor or game stopped responding.')
             logpath=w/'state/rhun/extensions/rhun-editor--doom.log'
             log=logpath.read_text() if logpath.exists() else ''
             output=(out+err).decode(errors='replace')
@@ -84,7 +101,7 @@ class Gameplay(unittest.TestCase):
                  'wait 5000','print-extensions','print-views','print-toast']
         a,out,log=self.run_case('gameplay',actions)
         self.assertTrue(any(s['paired'] for s in a),'This test needs the optional view-key-state editor patch.')
-        self.assertIn('DOOM AudioQueue: 0',log)
+        self.assertIn('DOOM audio device: 0',log)
         self.assertIn('DOOM music synth: 0',log)
         playing=[s for s in a if s['focused'] and not s['paused']]
         self.assertGreater(len(playing),20)
@@ -92,6 +109,7 @@ class Gameplay(unittest.TestCase):
         self.assertGreater(len({s['angle'] for s in playing}),3,'Turning did not advance.')
         self.assertLess(min(s['ammo'] for s in playing),50,'Firing did not use ammunition.')
         self.assertGreater(max(s['sounds'] for s in a),0)
+        self.assertGreater(max(s['music_samples'] for s in a),1000,'The music synthesizer did not render samples.')
         self.assertGreater(max(s['samples'] for s in a),1000,'The real audio callback did not mix sound.')
         # A manual pause must survive losing and regaining window focus.
         groups=[];current=[]
@@ -103,7 +121,7 @@ class Gameplay(unittest.TestCase):
         self.assertTrue(long_pause,'The manual pause did not remain active.')
         self.assertTrue(any(g[-1]['ticks_ms']==g[0]['ticks_ms'] for g in long_pause),'Game time advanced while paused.')
         self.assertRegex(out,r'view=2 title=DOOM .*size=860x518')
-        self.assertIn('confined=1',out)
+        self.check_confinement(out)
         last=playing[-1];prior=next(s for s in reversed(playing) if s['wall_ms']<=last['wall_ms']-3000)
         fps=(last['frames']-prior['frames'])*1000/(last['wall_ms']-prior['wall_ms'])
         self.assertGreater(fps,12,'Frame delivery is too slow to play.')
@@ -111,11 +129,13 @@ class Gameplay(unittest.TestCase):
         (ARTIFACTS/'gameplay/summary.json').write_text(json.dumps(summary,indent=2)+'\n')
         print('Gameplay:',json.dumps(summary))
 
+    @unittest.skipUnless(sys.platform=='darwin' and not os.environ.get('DOOM_AUDIO_BACKEND'),
+                         'speaker sandbox enforcement needs a physical macOS audio device')
     def test_audio_is_not_granted_without_the_manifest_permission(self):
         _,out,log=self.run_case('no-audio',['cmd doom.play','wait 2200','print-extensions'],audio=False)
-        self.assertRegex(log,r'DOOM AudioQueue: -[0-9]+')
+        self.assertRegex(log,r'DOOM audio device: -[0-9]+')
         self.assertIn('DOOM ready:',log)
-        self.assertIn('confined=1',out)
+        self.check_confinement(out)
 
     def test_released_controls_stop_movement_turning_and_firing(self):
         actions=['cmd doom.play','wait 2200','click 550 400','wait 100',
@@ -143,7 +163,7 @@ class Gameplay(unittest.TestCase):
         _,out,log=self.run_case('quit-menu',actions)
         self.assertNotRegex(out,r'view=1 title=DOOM')
         self.assertRegex(out,r'view=2 title=DOOM')
-        self.assertNotIn('AudioQueue: -',log)
+        self.assertNotIn('audio device: -',log)
 
     def test_missing_game_data_has_a_useful_message(self):
         _,out,_=self.run_case('missing-data',['cmd doom.play','wait 300','print-toast','print-extensions'],wad='missing')

@@ -3,9 +3,16 @@
 #include "platform.h"
 #include "w_wad.h"
 #include "z_zone.h"
-#include <AudioToolbox/AudioToolbox.h>
-#include <AudioUnit/AudioUnit.h>
-#include <pthread.h>
+#include "os.h"
+#define MA_NO_DECODING
+#define MA_NO_ENCODING
+#define MA_NO_RESOURCE_MANAGER
+#define MA_NO_NODE_GRAPH
+#define MA_NO_ENGINE
+#define MINIAUDIO_IMPLEMENTATION
+#include "miniaudio.h"
+#define TSF_IMPLEMENTATION
+#include "tsf.h"
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,85 +29,101 @@ typedef struct {
     float left, right;
 } voice;
 static voice voices[CHANNELS];
-static AudioQueueRef queue;
-static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+static ma_device device;
+static ma_context context;
+static int device_open, context_open, lock_open;
+static ma_mutex lock;
+static char font_path[4096];
 static _Atomic int audible;
-static _Atomic unsigned long mixed_samples, sound_starts;
-static AUGraph graph;
-static AudioUnit synth;
+static _Atomic unsigned long mixed_samples, music_samples, sound_starts;
+static tsf *synth;
 static int music_volume = 100;
 
-static void mix(void *user, AudioQueueRef q, AudioQueueBufferRef buf) {
-    (void)user;
-    int16_t *out = buf->mAudioData;
-    memset(out, 0, BLOCK * 4);
-    pthread_mutex_lock(&lock);
+void platform_audio_data(const char *extension_dir) {
+    snprintf(font_path, sizeof font_path, "%s/data/TimGM6mb.sf2", extension_dir);
+    lock_open = ma_mutex_init(&lock) == MA_SUCCESS;
+}
+static void mix(ma_device *d, void *output, const void *input, ma_uint32 count) {
+    (void)d;
+    (void)input;
+    int16_t *out = output;
+    memset(out, 0, (size_t)count * 4);
+    ma_mutex_lock(&lock);
     if (atomic_load(&audible)) {
-        for (int f = 0; f < BLOCK; f++) {
-            float left = 0, right = 0;
-            for (int c = 0; c < CHANNELS; c++) {
-                voice *v = &voices[c];
-                if (!v->data)
-                    continue;
-                if (v->pos >= v->len) {
-                    v->data = NULL;
-                    continue;
+        float music[BLOCK * 2];
+        for (unsigned offset = 0; offset < count;) {
+            unsigned n = count - offset;
+            if (n > BLOCK) n = BLOCK;
+            memset(music, 0, n * 2 * sizeof(float));
+            if (synth) tsf_render_float(synth, music, (int)n, 0);
+            for (unsigned f = 0; f < n; f++) {
+                float left = music[f * 2] * 24000, right = music[f * 2 + 1] * 24000;
+                if (left || right) atomic_fetch_add(&music_samples, 1);
+                for (int c = 0; c < CHANNELS; c++) {
+                    voice *v = &voices[c];
+                    if (!v->data) continue;
+                    if (v->pos >= v->len) { v->data = NULL; continue; }
+                    float sample = ((int)v->data[(uint32_t)v->pos] - 128) * 128.0f;
+                    v->pos += (double)v->rate / RATE;
+                    left += sample * v->left;
+                    right += sample * v->right;
                 }
-                float sample = ((int)v->data[(uint32_t)v->pos] - 128) * 128.0f;
-                v->pos += (double)v->rate / RATE;
-                left += sample * v->left;
-                right += sample * v->right;
+                if (left > 32767) left = 32767;
+                if (left < -32768) left = -32768;
+                if (right > 32767) right = 32767;
+                if (right < -32768) right = -32768;
+                out[(offset + f) * 2] = (int16_t)left;
+                out[(offset + f) * 2 + 1] = (int16_t)right;
+                if (left || right) atomic_fetch_add(&mixed_samples, 1);
             }
-            if (left > 32767)
-                left = 32767;
-            if (left < -32768)
-                left = -32768;
-            if (right > 32767)
-                right = 32767;
-            if (right < -32768)
-                right = -32768;
-            out[f * 2] = (int16_t)left;
-            out[f * 2 + 1] = (int16_t)right;
-            if (left || right)
-                atomic_fetch_add(&mixed_samples, 1);
+            offset += n;
         }
     }
-    pthread_mutex_unlock(&lock);
-    buf->mAudioDataByteSize = BLOCK * 4;
-    AudioQueueEnqueueBuffer(q, buf, 0, NULL);
+    ma_mutex_unlock(&lock);
 }
 static boolean sound_init(boolean prefix) {
     (void)prefix;
-    AudioStreamBasicDescription f = {0};
-    f.mSampleRate = RATE;
-    f.mFormatID = kAudioFormatLinearPCM;
-    f.mFormatFlags = kLinearPCMFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked;
-    f.mBytesPerPacket = 4;
-    f.mFramesPerPacket = 1;
-    f.mBytesPerFrame = 4;
-    f.mChannelsPerFrame = 2;
-    f.mBitsPerChannel = 16;
-    OSStatus s = AudioQueueNewOutput(&f, mix, NULL, NULL, NULL, 0, &queue);
-    if (s) {
-        fprintf(stderr, "DOOM audio unavailable: %d\n", (int)s);
-        queue = NULL;
-        return false;
+    if (device_open) return true;
+    if (!lock_open) return false;
+    ma_context_config cc = ma_context_config_init();
+    ma_backend backend = ma_backend_null;
+    const ma_backend native[] = {
+#ifdef __APPLE__
+        ma_backend_coreaudio
+#elif defined(_WIN32)
+        ma_backend_wasapi, ma_backend_dsound, ma_backend_winmm
+#else
+        ma_backend_pulseaudio, ma_backend_alsa
+#endif
+    };
+    const char *requested = getenv("DOOM_AUDIO_BACKEND");
+    int use_null = requested && !strcmp(requested, "null") && getenv("DOOM_DIAGNOSTICS");
+    ma_result r = ma_context_init(use_null ? &backend : native,
+                                 use_null ? 1 : (ma_uint32)(sizeof native / sizeof native[0]),
+                                 &cc, &context);
+    context_open = r == MA_SUCCESS;
+    ma_device_config config = ma_device_config_init(ma_device_type_playback);
+    config.playback.format = ma_format_s16;
+    config.playback.channels = 2;
+    config.sampleRate = RATE;
+    config.dataCallback = mix;
+    config.periodSizeInFrames = BLOCK;
+    if (r == MA_SUCCESS) r = ma_device_init(&context, &config, &device);
+    if (r == MA_SUCCESS) {
+        device_open = 1;
+        r = ma_device_start(&device);
     }
-    for (int i = 0; i < 3; i++) {
-        AudioQueueBufferRef b;
-        if (AudioQueueAllocateBuffer(queue, BLOCK * 4, &b))
-            return false;
-        mix(NULL, queue, b);
+    fprintf(stderr, "DOOM audio device: %d (%s)\n", r,
+            context_open ? ma_get_backend_name(context.backend) : "unavailable");
+    if (r != MA_SUCCESS && device_open) {
+        ma_device_uninit(&device);
+        device_open = 0;
     }
-    s = AudioQueueStart(queue, NULL);
-    fprintf(stderr, "DOOM AudioQueue: %d\n", (int)s);
-    return s == 0;
+    return r == MA_SUCCESS;
 }
 static void sound_shutdown(void) {
-    if (queue) {
-        AudioQueueDispose(queue, 1);
-        queue = NULL;
-    }
+    if (device_open) { ma_device_uninit(&device); device_open = 0; }
+    if (context_open) { ma_context_uninit(&context); context_open = 0; }
 }
 static int lumpnum(sfxinfo_t *sfx) {
     char name[16];
@@ -111,10 +134,10 @@ static void sound_update(void) {}
 static void params(int ch, int vol, int sep) {
     if (ch < 0 || ch >= CHANNELS)
         return;
-    pthread_mutex_lock(&lock);
+    ma_mutex_lock(&lock);
     voices[ch].left = vol / 127.0f * (254 - sep) / 254.0f;
     voices[ch].right = vol / 127.0f * sep / 254.0f;
-    pthread_mutex_unlock(&lock);
+    ma_mutex_unlock(&lock);
 }
 static int start(sfxinfo_t *sfx, int ch, int vol, int sep) {
     if (ch < 0 || ch >= CHANNELS)
@@ -129,26 +152,26 @@ static int start(sfxinfo_t *sfx, int ch, int vol, int sep) {
     uint32_t rate = p[2] | p[3] << 8, n = p[4] | p[5] << 8 | p[6] << 16 | p[7] << 24;
     if (n > len - 8 || n <= 32 || !rate)
         return -1;
-    pthread_mutex_lock(&lock);
+    ma_mutex_lock(&lock);
     voices[ch] = (voice){
         p + 24, n - 32, rate, 0, vol / 127.0f * (254 - sep) / 254.0f, vol / 127.0f * sep / 254.0f};
-    pthread_mutex_unlock(&lock);
+    ma_mutex_unlock(&lock);
     atomic_fetch_add(&sound_starts, 1);
     return ch;
 }
 static void stop(int ch) {
     if (ch < 0 || ch >= CHANNELS)
         return;
-    pthread_mutex_lock(&lock);
+    ma_mutex_lock(&lock);
     voices[ch].data = NULL;
-    pthread_mutex_unlock(&lock);
+    ma_mutex_unlock(&lock);
 }
 static boolean playing(int ch) {
     if (ch < 0 || ch >= CHANNELS)
         return false;
-    pthread_mutex_lock(&lock);
+    ma_mutex_lock(&lock);
     int yes = voices[ch].data != NULL;
-    pthread_mutex_unlock(&lock);
+    ma_mutex_unlock(&lock);
     return yes;
 }
 static void cache(sfxinfo_t *sounds, int n) {
@@ -168,59 +191,50 @@ typedef struct {
 } song;
 static song *current;
 static uint64_t music_epoch, music_pause;
-static uint64_t now_ms(void) {
-    struct timespec t;
-    clock_gettime(CLOCK_MONOTONIC, &t);
-    return (uint64_t)t.tv_sec * 1000 + t.tv_nsec / 1000000;
-}
+static uint64_t now_ms(void) { return doom_now_ms(); }
 static void midi(unsigned status, unsigned a, unsigned b) {
-    if (synth)
-        MusicDeviceMIDIEvent(synth, status, a, b, 0);
+    ma_mutex_lock(&lock);
+    if (synth) {
+        int ch = status & 15;
+        switch (status & 0xf0) {
+        case 0x80: tsf_channel_note_off(synth, ch, a); break;
+        case 0x90:
+            if (b) tsf_channel_note_on(synth, ch, a, b / 127.0f);
+            else tsf_channel_note_off(synth, ch, a);
+            break;
+        case 0xb0: tsf_channel_midi_control(synth, ch, a, b); break;
+        case 0xc0: tsf_channel_set_presetnumber(synth, ch, a, ch == 9); break;
+        case 0xe0: tsf_channel_set_pitchwheel(synth, ch, a | (b << 7)); break;
+        }
+    }
+    ma_mutex_unlock(&lock);
 }
 static void silence(void) {
-    for (int ch = 0; ch < 16; ch++)
-        midi(0xb0 | ch, 120, 0);
+    for (int ch = 0; ch < 16; ch++) midi(0xb0 | ch, 120, 0);
 }
 static boolean music_init(void) {
-    if (graph)
-        return true;
-    AUNode instrument, output;
-    AudioComponentDescription d = {kAudioUnitType_MusicDevice, kAudioUnitSubType_DLSSynth,
-                                   kAudioUnitManufacturer_Apple, 0, 0};
-    OSStatus s = NewAUGraph(&graph);
-    if (!s)
-        s = AUGraphAddNode(graph, &d, &instrument);
-    d.componentType = kAudioUnitType_Output;
-    d.componentSubType = kAudioUnitSubType_DefaultOutput;
-    if (!s)
-        s = AUGraphAddNode(graph, &d, &output);
-    if (!s)
-        s = AUGraphOpen(graph);
-    if (!s)
-        s = AUGraphNodeInfo(graph, instrument, NULL, &synth);
-    if (!s)
-        s = AUGraphConnectNodeInput(graph, instrument, 0, output, 0);
-    if (!s)
-        s = AUGraphInitialize(graph);
-    if (!s)
-        s = AUGraphStart(graph);
-    fprintf(stderr, "DOOM music synth: %d\n", (int)s);
-    if (s) {
-        if (graph)
-            DisposeAUGraph(graph);
-        graph = NULL;
-        synth = NULL;
-        return false;
+    if (synth) return true;
+    if (!lock_open) return false;
+    tsf *font = tsf_load_filename(font_path);
+    if (font) {
+        tsf_set_output(font, TSF_STEREO_INTERLEAVED, RATE, -6.0f);
+        if (!tsf_set_max_voices(font, 96)) { tsf_close(font); font = NULL; }
     }
-    return true;
+    if (font) {
+        for (int ch = 0; ch < 16; ch++) tsf_channel_set_presetnumber(font, ch, 0, ch == 9);
+        ma_mutex_lock(&lock);
+        synth = font;
+        ma_mutex_unlock(&lock);
+    }
+    fprintf(stderr, "DOOM music synth: %d\n", font ? 0 : -1);
+    return font != NULL;
 }
 static void music_shutdown(void) {
-    silence();
-    if (graph) {
-        AUGraphStop(graph);
-        DisposeAUGraph(graph);
-        graph = NULL;
+    if (synth) {
+        ma_mutex_lock(&lock);
+        tsf_close(synth);
         synth = NULL;
+        ma_mutex_unlock(&lock);
     }
 }
 static void music_set_volume(int v) {
@@ -400,7 +414,8 @@ void platform_audio_shutdown(void) {
     sound_shutdown();
     music_shutdown();
 }
-void platform_audio_stats(unsigned long *samples, unsigned long *sounds) {
+void platform_audio_stats(unsigned long *samples, unsigned long *sounds, unsigned long *music) {
     *samples = atomic_load(&mixed_samples);
     *sounds = atomic_load(&sound_starts);
+    *music = atomic_load(&music_samples);
 }

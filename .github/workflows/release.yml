@@ -1,0 +1,110 @@
+name: release
+on:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {target: macos-arm64, os: macos-15}
+          - {target: linux-x86_64, os: ubuntu-22.04}
+          - {target: windows-x64, os: windows-2022}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: vshvedov/rhun
+          ref: 2a155fd417239e6baff8f714996472f7f96d4c01
+          path: build/rhun-host
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache: false
+      - name: Linux build and audio tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq clang zlib1g-dev pulseaudio libpulse0 libasound2 xvfb xdotool openbox
+      - uses: msys2/setup-msys2@v2
+        if: runner.os == 'Windows'
+        with:
+          msystem: MINGW64
+          update: true
+          install: make mingw-w64-x86_64-gcc mingw-w64-x86_64-zlib mingw-w64-x86_64-llvm mingw-w64-x86_64-clang mingw-w64-x86_64-lld
+      - name: Windows tool paths
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          'C:/msys64/mingw64/bin' | Out-File -FilePath $env:GITHUB_PATH -Append
+          'LLVM_BIN=C:/msys64/mingw64/bin' | Out-File -FilePath $env:GITHUB_ENV -Append
+          'CC=C:/msys64/mingw64/bin/gcc.exe' | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Apply the companion editor support
+        shell: bash
+        run: git -C build/rhun-host apply "$GITHUB_WORKSPACE/patches/rhun-local-media.patch"
+      - name: Build Unix editor and extension
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -e
+          make -s -j4
+          (cd build/rhun-host && sh build.sh release)
+          echo "DOOM_RHUN=$GITHUB_WORKSPACE/build/rhun-host/build/rhun" >> "$GITHUB_ENV"
+      - name: Build Windows extension
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: make -s -j4 CC=gcc
+      - name: Build Windows editor
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python build/rhun-host/tools/build-windows.py release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "DOOM_RHUN=$env:GITHUB_WORKSPACE/build/rhun-host/build/windows/rhun.exe" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Configure test audio
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            export XDG_RUNTIME_DIR="$RUNNER_TEMP/doom-audio"
+            mkdir -p "$XDG_RUNTIME_DIR"
+            chmod 700 "$XDG_RUNTIME_DIR"
+            pulseaudio --start --exit-idle-time=-1
+            pactl load-module module-null-sink sink_name=doom-test
+            pactl set-default-sink doom-test
+            echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
+          else
+            echo 'DOOM_AUDIO_BACKEND=null' >> "$GITHUB_ENV"
+          fi
+      - name: Unit tests
+        run: python tests/unit.py
+      - name: Build installation archive
+        run: python tools/package.py ${{ matrix.target }}
+      - name: Test the packaged binary in the native editor
+        env:
+          DOOM_PACKAGE_ROOT: ${{ github.workspace }}/build/package/${{ matrix.target }}
+        run: python tests/run.py
+      - name: Protocol conformance on the package
+        env:
+          DOOM_PACKAGE_ROOT: ${{ github.workspace }}/build/package/${{ matrix.target }}
+          DOOM_DIAGNOSTICS: '1'
+          DOOM_AUDIO_BACKEND: 'null'
+        run: python tools/check.py
+      - name: Editor picture regressions
+        env:
+          RHUN_TEST_EXE: ${{ env.DOOM_RHUN }}
+        run: python build/rhun-host/tests/ext-views-picture.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tests-${{ matrix.target }}
+          path: build/test-results
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ matrix.target }}
+          path: dist/*

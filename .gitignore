@@ -1,5 +1,8 @@
 /build/
 /bin/
+/dist/
+__pycache__/
+*.pyc
 /data/*.wad
 !/data/doom1.wad
 /data/*.tar.gz

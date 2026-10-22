@@ -43,3 +43,21 @@ https://sources.debian.org/src/doom-wad-shareware/1.9.fixed-4/debian/copyright/
 The shareware WAD must remain unmodified and cannot be sold or charged for without id Software's
 prior written consent. It is not GPL licensed. This repository distributes it free of charge.
 No registered Doom or Doom II assets are included or downloaded.
+
+## Portable audio and music
+
+`vendor/miniaudio` is from https://github.com/mackron/miniaudio at commit
+`9634bedb5b5a2ca38c1ee7108a9358a4e233f14d`. It is used under its MIT No Attribution option;
+the complete upstream license is retained in that folder and included in binary packages.
+
+`vendor/tinysoundfont` is from https://github.com/schellingb/TinySoundFont at commit
+`853a0a171759f1ddba0de1442133a75912bbeffa`, under MIT. Its license is retained and packaged.
+The Doom MUS score drives this synthesizer on all three platforms.
+
+`data/TimGM6mb.sf2` is the TimGM6mb 1.3 General MIDI instrument bank from Debian's
+`timgm6mb-soundfont_1.3.orig.tar.gz`. It is GPL-2.0 licensed, copyrighted by Tim Brechbill
+(2004) and David Bolton (2010). The complete notice is in `data/SOUNDFONT-LICENSE.txt` and
+the GPL text is in `LICENSE`. The SoundFont itself is its editable source and is included
+unchanged in both the source repository and binary packages.
+
+SoundFont SHA-256: `c5378b62028c920cb11e4803327983fee2f2cdff5dc89c708e39da417e51c854`.

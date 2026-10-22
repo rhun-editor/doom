@@ -9,15 +9,14 @@
 #include "m_menu.h"
 #include "p_mobj.h"
 #include "platform.h"
+#include "os.h"
 #include <limits.h>
-#include <poll.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
-#include <unistd.h>
 
 extern void M_ClearMenus(void);
 
@@ -62,15 +61,15 @@ static void diagnostics(void) {
     FILE *f = fopen(path, "w");
     if (!f)
         return;
-    unsigned long samples, sounds;
-    platform_audio_stats(&samples, &sounds);
+    unsigned long samples, sounds, music;
+    platform_audio_stats(&samples, &sounds, &music);
     mobj_t *mo = started ? players[consoleplayer].mo : NULL;
     fprintf(f,
             "{\"wall_ms\":%llu,\"paired\":%d,\"frames\":%lu,\"bytes\":%lu,\"sounds\":%lu,"
-            "\"samples\":%lu,\"paused\":%d,\"focused\":%d,\"ticks_ms\":%u,\"x\":%d,\"y\":%d,"
+            "\"samples\":%lu,\"music_samples\":%lu,\"paused\":%d,\"focused\":%d,\"ticks_ms\":%u,\"x\":%d,\"y\":%d,"
             "\"angle\":%u,\"ammo\":%d}\n",
             (unsigned long long)wall_ms(), host ? rx_has(host, "view-key-state") : 0, frames, bytes,
-            sounds, samples, suspended, focused, started ? DG_GetTicksMs() : 0, mo ? mo->x : 0,
+            sounds, samples, music, suspended, focused, started ? DG_GetTicksMs() : 0, mo ? mo->x : 0,
             mo ? mo->y : 0, mo ? mo->angle : 0, started ? players[consoleplayer].ammo[am_clip] : 0);
     fclose(f);
     if (snprintf(path, sizeof path, "%s/doom-stats.jsonl", state_path) >= (int)sizeof path)
@@ -80,18 +79,16 @@ static void diagnostics(void) {
         return;
     fprintf(
         f,
-        "{\"wall_ms\":%llu,\"paired\":%d,\"frames\":%lu,\"sounds\":%lu,\"samples\":%lu,\"paused\":%"
+        "{\"wall_ms\":%llu,\"paired\":%d,\"frames\":%lu,\"sounds\":%lu,\"samples\":%lu,\"music_samples\":%lu,\"paused\":%"
         "d,\"focused\":%d,\"ticks_ms\":%u,\"x\":%d,\"y\":%d,\"angle\":%u,\"ammo\":%d}\n",
         (unsigned long long)wall_ms(), host ? rx_has(host, "view-key-state") : 0, frames, sounds,
-        samples, suspended, focused, started ? DG_GetTicksMs() : 0, mo ? mo->x : 0, mo ? mo->y : 0,
+        samples, music, suspended, focused, started ? DG_GetTicksMs() : 0, mo ? mo->x : 0, mo ? mo->y : 0,
         mo ? mo->angle : 0, started ? players[consoleplayer].ammo[am_clip] : 0);
     fclose(f);
 }
 
 static uint64_t wall_ms(void) {
-    struct timespec t;
-    clock_gettime(CLOCK_MONOTONIC, &t);
-    return (uint64_t)t.tv_sec * 1000 + t.tv_nsec / 1000000;
+    return doom_now_ms();
 }
 void doom_key_set(unsigned char key, int down) {
     down = !!down;
@@ -127,8 +124,7 @@ uint32_t DG_GetTicksMs(void) {
     return (uint32_t)((pause_at ? pause_at : wall_ms()) - epoch - paused_ms);
 }
 void DG_SleepMs(uint32_t ms) {
-    struct timespec t = {(time_t)(ms / 1000), (long)(ms % 1000) * 1000000};
-    nanosleep(&t, NULL);
+    doom_sleep_ms(ms);
 }
 void DG_Init(void) {}
 void DG_SetWindowTitle(const char *title) { (void)title; }
@@ -434,8 +430,8 @@ static void on_bye(rx_ext *ext, void *user) {
     if (started)
         M_SaveDefaults();
     platform_audio_shutdown();
-    unsigned long samples, sounds;
-    platform_audio_stats(&samples, &sounds);
+    unsigned long samples, sounds, music;
+    platform_audio_stats(&samples, &sounds, &music);
     fprintf(stderr, "DOOM stats: frames=%lu bytes=%lu sounds=%lu samples=%lu\n", frames, bytes,
             sounds, samples);
 }
@@ -443,8 +439,7 @@ void doom_request_close(void) { close_requested = 1; }
 static int doom_idle(rx_ext *ext) {
     host = ext;
     uint64_t now = wall_ms();
-    struct pollfd p = {STDIN_FILENO, POLLIN, 0};
-    if (poll(&p, 1, 0) > 0)
+    if (doom_input_ready(0))
         return 1;
     if (redraw_needed) {
         redraw_needed = 0;
@@ -485,7 +480,7 @@ static int doom_idle(rx_ext *ext) {
     if (ext->queue)
         return 1;
     int timeout = (started && view && !suspended) ? 2 : 50;
-    return poll(&p, 1, timeout) > 0;
+    return doom_input_ready(timeout);
 }
 static int on_copy(rx_ext *ext, int64_t id, int cut, rx_buf *out, void *user) {
     (void)ext;
@@ -504,6 +499,7 @@ int main(void) {
     char cwd[PATH_MAX];
     if (!getcwd(cwd, sizeof cwd))
         return 1;
+    platform_audio_data(cwd);
     if (snprintf(wad_path, sizeof wad_path, "%s/data/doom1.wad", cwd) >= (int)sizeof wad_path)
         return 1;
     const char *state = getenv("RHUN_STATE");

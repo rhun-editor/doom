@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Exercise the PNG frame transport independently of the editor and engine."""
 import ctypes
+import os
+import shlex
+import sys
 from pathlib import Path
 import struct
 import subprocess
@@ -12,8 +15,11 @@ ROOT=Path(__file__).resolve().parents[1]
 class PNG(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        subprocess.run(['clang','-shared','-fPIC','-Isrc','src/png.c','-lz','-o','build/png-test.dylib'],cwd=ROOT,check=True)
-        cls.lib=ctypes.CDLL(str(ROOT/'build/png-test.dylib'))
+        library=ROOT/'build'/('png-test.dll' if sys.platform=='win32' else 'png-test.so')
+        args=shlex.split(os.environ.get('CC','clang'))+['-shared','-Isrc','src/png.c','-o',str(library)]
+        args+=['-static','-lz'] if sys.platform=='win32' else ['-fPIC','-lz']
+        subprocess.run(args,cwd=ROOT,check=True)
+        cls.lib=ctypes.CDLL(str(library))
         cls.lib.doom_png.restype=ctypes.c_size_t
         cls.pixels=(ctypes.c_ubyte*64000)(*(i%256 for i in range(64000)))
         cls.palette=(ctypes.c_ubyte*768)(*(i%256 for i in range(768)))
