@@ -17,7 +17,10 @@ def layout(target, dest):
     dest.mkdir(parents=True, exist_ok=True)
     for name in ('extension.ini', 'README.md', 'LICENSE', 'THIRD_PARTY.md'):
         shutil.copy2(ROOT / name, dest / name)
-    shutil.copytree(ROOT / 'data', dest / 'data', dirs_exist_ok=True)
+    (dest / 'data').mkdir(exist_ok=True)
+    for name in ('doom1.wad', 'TimGM6mb.sf2', 'SHAREWARE-LICENSE.txt',
+                 'SOUNDFONT-LICENSE.txt', 'README.md'):
+        shutil.copy2(ROOT / 'data' / name, dest / 'data' / name)
     (dest / 'bin').mkdir(exist_ok=True)
     shutil.copy2(ROOT / 'bin' / binary, dest / 'bin' / binary)
     (dest / 'bin' / binary).chmod(0o755)

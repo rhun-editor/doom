@@ -48,11 +48,11 @@ jobs:
           install: make mingw-w64-x86_64-gcc mingw-w64-x86_64-zlib mingw-w64-x86_64-llvm mingw-w64-x86_64-clang mingw-w64-x86_64-lld
       - name: Windows tool paths
         if: runner.os == 'Windows'
-        shell: pwsh
+        shell: msys2 {0}
         run: |
-          'C:/msys64/mingw64/bin' | Out-File -FilePath $env:GITHUB_PATH -Append
-          'LLVM_BIN=C:/msys64/mingw64/bin' | Out-File -FilePath $env:GITHUB_ENV -Append
-          'CC=C:/msys64/mingw64/bin/gcc.exe' | Out-File -FilePath $env:GITHUB_ENV -Append
+          echo "$(cygpath -m /mingw64/bin)" >> "$GITHUB_PATH"
+          echo "LLVM_BIN=$(cygpath -m /mingw64/bin)" >> "$GITHUB_ENV"
+          echo "CC=$(cygpath -m /mingw64/bin/gcc.exe)" >> "$GITHUB_ENV"
       - name: Apply the companion editor support
         shell: bash
         run: |
@@ -105,6 +105,8 @@ jobs:
           DOOM_DIAGNOSTICS: '1'
           DOOM_AUDIO_BACKEND: 'null'
         run: python tools/check.py
+      - name: Install the release archive through rhun
+        run: python tests/install.py
       - name: Editor picture regressions
         env:
           RHUN_TEST_EXE: ${{ env.DOOM_RHUN }}

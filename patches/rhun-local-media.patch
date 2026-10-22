@@ -272,7 +272,7 @@ index e415149c..6ddf2d03 100644
  .Ln_sep: .asciz ", "
  .Leq: .asciz " = "
 diff --git a/src/app/viewpic.s b/src/app/viewpic.s
-index 6de69a38..814eedf7 100644
+index 6de69a38..225dcebd 100644
 --- a/src/app/viewpic.s
 +++ b/src/app/viewpic.s
 @@ -463,6 +463,96 @@ keys_on:
@@ -372,7 +372,7 @@ index 6de69a38..814eedf7 100644
  # viewpic_key(VW*, keysym, cp, mods) -> eax 1 when the picture took the key: keys a binding takes
  #   are left to it, except copy, cut and select_all, which reach the picture
  FN viewpic_key
-@@ -874,9 +964,15 @@ FN views_features_agreed
+@@ -874,9 +964,21 @@ FN views_features_agreed
      jnz 2f
      FEAT_CLEAR rdi, FEAT_VIEW_KEYS
      FEAT_CLEAR rdi, FEAT_VIEW_IMAGES
@@ -380,8 +380,14 @@ index 6de69a38..814eedf7 100644
 +2:  FEAT_TEST rdi, FEAT_VIEW_KEYS
 +    jnz 3f
 +    FEAT_CLEAR rdi, FEAT_VIEW_KEY_STATE
-+3:
-+    ret
++3:  cmp dword ptr [rip + g_view_key_state_available], 0
++    jne 4f
++    FEAT_CLEAR rdi, FEAT_VIEW_KEY_STATE
++4:  ret
++
++.data
++.globl g_view_key_state_available
++g_view_key_state_available: .long 1  # headless, macOS, Wayland and Windows have paired releases
  
  .section .rodata
 +.Le_key_up: .asciz "key-up "
@@ -479,7 +485,7 @@ index abdccec0..6cd3eb37 100644
  .Lk_repeat:
      mov eax, [r12]
 diff --git a/src/plat/x11.s b/src/plat/x11.s
-index 919ee3ec..cfa795dc 100644
+index 919ee3ec..9dbe3c6a 100644
 --- a/src/plat/x11.s
 +++ b/src/plat/x11.s
 @@ -291,6 +291,8 @@ x_message:
@@ -577,7 +583,15 @@ index 919ee3ec..cfa795dc 100644
      mov esi, r15d
      call app_on_key
      mov dword ptr [rip + g_key_base], 0
-@@ -1252,6 +1319,16 @@ x_xkb_use:
+@@ -1203,6 +1270,7 @@ x_big_requests:
+ # XKB on: key events then carry the layout group in state bits 13-14
+ x_xkb_use:
+     PROLOGUE 32
++    mov dword ptr [rip + g_view_key_state_available], 0
+     lea rdi, [rsp]
+     xor esi, esi
+     mov edx, 32
+@@ -1252,6 +1320,25 @@ x_xkb_use:
      lea rdi, [rsp]
      mov esi, 16
      call x_req
@@ -591,14 +605,36 @@ index 919ee3ec..cfa795dc 100644
 +    lea rdi, [rsp]
 +    mov esi, 28
 +    call x_req
++    mov eax, [rip + seq]
++    and eax, 0xffff
++    mov [rip + want_seq], eax
++    call x_wait_reply
++    test dword ptr [rip + reply_buf + 8], 1
++    jz 9f
++    test dword ptr [rip + reply_buf + 12], 1
++    jz 9f
++    mov dword ptr [rip + g_view_key_state_available], 1
  9:  EPILOGUE
  
  # keyboard mapping (synchronous)
 diff --git a/src/rhun.inc b/src/rhun.inc
-index 033bec00..9c2eac2d 100644
+index 033bec00..34e0a4c0 100644
 --- a/src/rhun.inc
 +++ b/src/rhun.inc
-@@ -1716,6 +1716,7 @@ ENDSTRUCT TF_SIZE
+@@ -307,6 +307,12 @@ ENDSTRUCT RECT_SIZE
+ .equ KEY_KP_ENTER, 0xff8d
+ .equ KEY_F1, 0xffbe
+ .equ KEY_SHIFT_L, 0xffe1
++.equ KEY_SHIFT_R, 0xffe2
++.equ KEY_CTRL_L, 0xffe3
++.equ KEY_CTRL_R, 0xffe4
++.equ KEY_ALT_L, 0xffe9
++.equ KEY_ALT_R, 0xffea
++.equ KEY_SUPER_L, 0xffeb
+ .equ KEY_SUPER_R, 0xffec
+ .equ KEY_ISO_LEFT_TAB, 0xfe20
+ .equ KEY_DELETE, 0xffff
+@@ -1716,6 +1722,7 @@ ENDSTRUCT TF_SIZE
      FEATURE FEAT_QUICK_INPUT, "quick-input", 0    # views group: quick, quick-set, quick-close (quick.s)
      FEATURE FEAT_VIEW_DOC, "view-doc", 0          # views group: doc views (rdoc.s, markdown.s)
      FEATURE FEAT_MARKDOWN, "markdown", 0          # views group: Markdown in node tooltips and notification messages
@@ -606,7 +642,7 @@ index 033bec00..9c2eac2d 100644
  .endm
  # extproto.s sets FEATURE_NAMES and expands the list again as its name table
  .macro FEATURE sym, name, asks
-@@ -2486,6 +2487,7 @@ ENDSTRUCT XK_SIZE
+@@ -2486,6 +2493,7 @@ ENDSTRUCT XK_SIZE
  .equ NEEDS_NETWORK, 32
  .equ NEEDS_TERMINAL, 64
  .equ NEEDS_GIT_READ, 128        # [needs] git = read: the project's Git data through rhun (gitdata.s)

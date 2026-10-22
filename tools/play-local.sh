@@ -7,16 +7,20 @@ if [ -z "$editor" ] && [ -f .local-rhun ]; then editor=$(cat .local-rhun); fi
 if [ -z "$editor" ]; then editor=$(command -v rhun || true); fi
 [ -n "$editor" ] && [ -x "$editor" ] || { echo 'Set DOOM_RHUN to your rhun executable.' >&2; exit 1; }
 make -s -j4
+target=$(make -s print-target)
+binary=doom-$target
+[ "$target" != windows-x64 ] || binary=$binary.exe
 [ -f data/doom1.wad ] || sh tools/fetch-shareware.sh
 local="$root/build/local"
 ext="$local/extensions/rhun-editor/doom"
 mkdir -p "$ext/bin" "$ext/data" "$local/config/rhun" "$local/state" "$local/tmp"
 # Start automatically only in this disposable development install.
 sed 's/^on = command$/on = startup/' extension.ini > "$ext/extension.ini"
-cp bin/doom-macos-arm64 "$ext/bin/doom-macos-arm64.new"
-mv "$ext/bin/doom-macos-arm64.new" "$ext/bin/doom-macos-arm64"
+cp "bin/$binary" "$ext/bin/$binary.new"
+mv "$ext/bin/$binary.new" "$ext/bin/$binary"
 cp data/doom1.wad "$ext/data/doom1.wad"
 cp data/SHAREWARE-LICENSE.txt "$ext/data/SHAREWARE-LICENSE.txt"
+cp data/TimGM6mb.sf2 data/SOUNDFONT-LICENSE.txt "$ext/data/"
 cat > "$local/config/rhun/config" <<'EOF'
 [ui]
 agents_panel = false
