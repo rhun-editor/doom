@@ -10,7 +10,7 @@ Source: https://github.com/ozkl/doomgeneric
 Pinned commit: `e257a09527062bfb986b6e5e0780839b6cbd5b71`.
 
 The C source and headers are vendored in `vendor/doomgeneric`. The port removes the unused
-SDL_mixer include in `i_sound.c`, because it supplies native macOS sound and music modules.
+SDL_mixer include in `i_sound.c`, because the extension supplies portable sound and music modules.
 `i_system.c` delegates the game's Quit action to the extension, closing its tab while leaving
 the extension ready for another Play command. Settings are saved when the extension shuts down.
 Original copyright and license notices are preserved in each file.

@@ -42,7 +42,11 @@ with tempfile.TemporaryDirectory(prefix='Doom preview é ') as tmp:
     else:
         launcher = 'Play DOOM.command' if sys.platform == 'darwin' else 'Play DOOM.sh'
         args = ['sh', str(stage / launcher), *extra]
-    result = subprocess.run(args, cwd=stage, env=dict(os.environ, DOOM_DIAGNOSTICS='1'),
+    env = dict(os.environ, DOOM_DIAGNOSTICS='1')
+    if sys.platform == 'win32':
+        env['PATH'] = ';'.join(p for p in env['PATH'].split(';')
+                               if not any(s in p.lower() for s in ('msys', 'mingw', 'llvm')))
+    result = subprocess.run(args, cwd=stage, env=env,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=40)
     output = result.stdout.decode(errors='replace')
     (dest / 'launcher.log').write_text(output)

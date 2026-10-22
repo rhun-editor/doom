@@ -93,6 +93,8 @@ jobs:
           fi
       - name: Unit tests
         run: python tests/unit.py
+      - name: Audit runtime dependencies
+        run: python tools/audit-binary.py ${{ matrix.target }}
       - name: Build installation archive
         run: python tools/package.py ${{ matrix.target }}
       - name: Test the packaged binary in the native editor
@@ -107,6 +109,12 @@ jobs:
         run: python tools/check.py
       - name: Install the release archive through rhun
         run: python tests/install.py
+      - name: Native Linux key events
+        if: runner.os == 'Linux'
+        run: xvfb-run -a python tests/native-input.py
+      - name: Native Windows key events
+        if: runner.os == 'Windows'
+        run: python tests/native-input.py
       - name: Editor picture regressions
         env:
           RHUN_TEST_EXE: ${{ env.DOOM_RHUN }}

@@ -1,5 +1,5 @@
 diff --git a/docs/extensions/v1.1.md b/docs/extensions/v1.1.md
-index ff2ee1f7..4c5e2a13 100644
+index ff2ee1f7..863d9d82 100644
 --- a/docs/extensions/v1.1.md
 +++ b/docs/extensions/v1.1.md
 @@ -4195,3 +4195,27 @@ SDKs: Rust `Handler::resolve_debug(&DebugResolve) -> Resolved` (`Unchanged`, `Co
@@ -7,29 +7,29 @@ index ff2ee1f7..4c5e2a13 100644
  error refuses; `req.Context` ends with `0 cancel`); C the `debug_resolve` handler (0, 1 with `out`,
  -1 with `why`, -2). `rhun-ext-check` asks every `resolve = yes` debugger once per template section.
 +
-+## Audio output (experimental local build)
++## Local audio (experimental preview build)
 +
-+`[needs] audio = yes` permits playback through the system audio output. It does not permit
-+microphone capture. On macOS this grants the Core Audio output services and AudioIO shared
-+memory needed by AudioQueue and Audio Units. The permission is shown at installation and on
-+the extension page, and adding it during an update triggers the existing wider-access review.
-+Older hosts ignore this key, so extensions must handle unavailable audio gracefully.
++`[needs] audio = yes` declares access to local audio devices and services. The permission is
++shown at installation and on the extension page. Adding it during an update triggers the
++existing wider-access review. Older hosts ignore the key; handle unavailable audio gracefully.
 +
-+## Paired picture keys (experimental local build)
++macOS grants Core Audio output services and AudioIO shared memory without a microphone grant.
++Linux grants `/dev/snd`, the PulseAudio runtime directory and the user's PulseAudio cookie.
++Linux sound services can also expose recording: this is local audio-service authority, not a
++playback-only sandbox guarantee. Windows extensions currently run without an OS sandbox,
++as before this addition. Playback extensions should open playback streams only.
++
++## Paired picture keys (experimental preview build)
 +
 +`view-key-state` requires `views` and `view-keys`. On macOS, X11, Wayland and Windows it adds
-+`0 view VIEW key-up MODS NAME` paired with the existing key event, and
-+`0 view VIEW mods MODS` when modifiers change. Key repeats remain ordinary key events.
-+Window activation sends the focused picture `focus 1` or `focus 0`. Extensions must clear
-+held keys on focus loss and closure. Bound editor commands keep their keys. Older hosts
-+do not negotiate this feature; extensions may fall back to short key pulses.
-+
-+The local audio permission is platform specific. macOS grants the Core Audio output services
-+without a microphone grant. Linux grants access to `/dev/snd`, the PulseAudio runtime directory,
-+and the user's PulseAudio cookie. Linux sound services can also expose recording; this is local
-+audio-service authority, not a playback-only sandbox guarantee. Windows extensions currently run
-+without an OS sandbox, as before this addition. A playback extension must request playback only.
-+X11 requests detectable autorepeat for this client, so held keys do not produce synthetic releases.
++`0 view VIEW key-up MODS NAME` alongside the existing key event, and
++`0 view VIEW mods MODS` when modifiers change. Release names use the unshifted key name.
++Key repeats remain ordinary key events. Window activation sends the focused picture
++`focus 1` or `focus 0`. Clear held keys on focus loss and closure. Bound editor commands keep
++their keys. Older hosts do not negotiate this feature; short key pulses are a possible fallback.
++X11 requests detectable autorepeat for this client. If the server does not support it, the host
++does not negotiate `view-key-state`, so synthetic autorepeat releases cannot be mistaken for
++physical releases. Headless controls also accept `key-up COMBO` for protocol-level tests.
 diff --git a/src/app/app.s b/src/app/app.s
 index 7808dcb5..2f663bc6 100644
 --- a/src/app/app.s

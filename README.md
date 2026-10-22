@@ -1,40 +1,48 @@
 # DOOM in rhun
 
-The original Doom engine, running in a rhun editor tab. Native C, original 320×200 pixels,
-keyboard controls, sound effects, and music. No web view and no separate game window.
-
-This is a local macOS Apple silicon prototype. It has not been published to the extension index.
+The original Doom engine in a rhun editor tab. Native C, original 320×200 pixels, keyboard
+controls, sound effects and music. Builds for macOS Apple silicon, Linux x86-64 and Windows x64.
 
 ![DOOM running in a rhun tab](docs/doom-in-rhun.png)
 
-## Play locally
+This is a preview. Smooth held controls and audio need the experimental editor support shipped
+with the separate preview downloads. It has not been submitted to the extension index.
 
-Building needs the macOS command line developer tools (`clang` and `make`).
+## Play without compiling
 
-Double-click **Play DOOM.command**, or run:
+Open this repository's [Releases](https://github.com/rhun-editor/doom/releases). While the
+repository is private, sign in to GitHub with an account that has access to download the files.
 
-```sh
-make
-DOOM_RHUN=/path/to/rhun sh tools/play-local.sh
-```
+Download and extract the entire **rhun-doom-preview** package for your system:
 
-The launcher builds the extension, creates a separate development install and separate rhun
-config/state folders under `build/local`, and opens the game. Your normal editor settings and
-installed extensions are untouched. Click the game to play.
+| System | Download | Start |
+| --- | --- | --- |
+| macOS Apple silicon | `rhun-doom-preview-macos-arm64.zip` | `Play DOOM.command` |
+| Linux x86-64 | `rhun-doom-preview-linux-x86_64.tar.gz` | `sh "Play DOOM.sh"` |
+| Windows x64 | `rhun-doom-preview-windows-x64.zip` | `Play DOOM.cmd` |
 
-Full controls and sound currently need the accompanying experimental rhun patch:
+These packages include a separate rhun preview, the installed extension, shareware game data and
+music instruments. No compiler, Python, JavaScript runtime or additional download is required.
+The preview leaves your installed rhun and its settings alone. Its configuration and game state
+stay inside the extracted folder. Click the game to play.
 
-- `[needs] audio = yes` allows speaker output on macOS, without microphone access.
-- The optional `view-key-state` feature supplies key releases, modifier changes and window focus.
+The Mac preview app is not notarized. Linux needs glibc 2.35 or newer and a working PulseAudio
+(or PipeWire's PulseAudio service) or ALSA installation. Windows needs 64-bit Windows 10 or newer.
+The Windows binary includes its compiler runtime and zlib, so MSYS2 is not needed to play.
 
-`patches/rhun-local-media.patch` applies to rhun commit
-`2a155fd417239e6baff8f714996472f7f96d4c01` (0.18.1). Apply it in a separate checkout and build rhun
-there, then point `DOOM_RHUN` at that build. The local `.local-rhun` file may also hold that path;
-it is ignored by Git.
+## Install only the extension
 
-Unmodified 0.18.1 can display and run the game, with short key pulses as a fallback. Its macOS
-sandbox blocks sound playback, and it does not provide held-key releases. Use the patched build
-for the playable local demo.
+If you already have a rhun build with the companion audio and paired-key support, download
+`doom-TARGET.tar.gz`. In rhun, open **Extensions → Install → From an Archive** and select it.
+The archive includes the native binary, all game data and licenses. `sha256sums.txt` in the
+release covers every download. Keep it beside the archive to let rhun verify it at installation.
+
+Once the repository is public, **Install from GitHub → rhun-editor/doom** also works. Private
+releases need an authenticated download followed by **From an Archive**.
+
+Stock rhun 0.18.1 can render the game and uses short key pulses as a fallback. Full held controls
+and audio require the companion support. The source patch is `patches/rhun-local-media.patch`,
+against rhun commit `2a155fd417239e6baff8f714996472f7f96d4c01`.
 
 ## Controls
 
@@ -51,57 +59,73 @@ for the playable local demo.
 | P | Pause or resume |
 | M | Mute or unmute |
 
-The game pauses when its tab loses focus or the editor window becomes inactive. Held controls
-are cleared on focus loss. You can close and reopen the tab without starting a new process.
-The command palette also has **DOOM: New Game**, **DOOM: Pause or Resume**, and **DOOM: Toggle Sound**.
+The game pauses when its tab loses focus or the editor becomes inactive. Held controls clear
+on focus loss. Close and reopen the tab to continue. The command palette also has **DOOM: New
+Game**, **DOOM: Pause or Resume**, and **DOOM: Toggle Sound**.
 
-## Game data
+## Build locally
 
-The repository includes the unmodified Doom 1.9 shareware episode in `data/doom1.wad`, so no
-game-data download is needed after cloning. That IWAD contains the original graphics, music,
-sound effects and first episode. It remains copyrighted by id Software under its separate
-[shareware license](data/SHAREWARE-LICENSE.txt), which also preserves John Carmack's redistribution
-clarification. The GPL license for the engine does not apply to the game data.
+macOS needs the command line developer tools. Linux needs a C11 compiler, make and zlib development
+headers. Windows builds use MSYS2's MINGW64 environment with GCC, make and zlib. Dependencies are
+vendored; no library downloads occur during compilation.
 
-See [data/README.md](data/README.md) for the source and checksum, and [THIRD_PARTY.md](THIRD_PARTY.md)
-for upstream versions and licensing. The shareware data must stay unmodified and must not be sold
-or charged for without id Software's permission. No registered Doom or Doom II assets are
-included. Game saves and settings stay in the extension's rhun state folder.
+```sh
+make -j4
+DOOM_RHUN=/path/to/patched/rhun sh tools/play-local.sh
+```
 
-If the bundled WAD is missing, `sh tools/fetch-shareware.sh` restores the same file from Debian
-and verifies its SHA-256 checksum. The local launcher also uses this fallback automatically.
+The launcher builds the extension and creates a separate development install under `build/local`.
+The ignored `.local-rhun` file can hold the editor path. The optional shareware fetch script
+restores a missing WAD from Debian and verifies its checksum; clones already contain the WAD.
 
-## Tests
+## Tests and automated releases
+
+`.github/workflows/release.yml` builds on native macOS, Ubuntu and Windows runners. It runs PNG
+unit tests, protocol conformance, real-editor gameplay tests, archive installation, picture-view
+regressions and extracted-preview launcher tests. Linux and Windows also exercise their native
+window key handlers. Preview extraction tests include spaces and non-ASCII paths. Windows runs
+the extracted preview without MSYS2 or LLVM on PATH to catch missing runtime DLLs.
+
+Linux CI uses a PulseAudio test sink. Hosted Mac and Windows runners use an explicitly selected
+test audio device: they verify real-time effects and music synthesis, without claiming physical
+speaker playback. Local Mac testing also uses Core Audio and checks denial without the audio
+permission. Screenshots, logs and gameplay measurements are uploaded as workflow artifacts.
 
 ```sh
 make test
-sh tests/check.sh
-DOOM_RHUN=/path/to/patched/rhun python3 tests/run.py
+python3 tools/package.py macos-arm64
+DOOM_PACKAGE_ROOT="$PWD/build/package/macos-arm64/doom" python3 tools/check.py
+DOOM_PACKAGE_ROOT="$PWD/build/package/macos-arm64/doom" DOOM_RHUN=/path/to/rhun python3 tests/run.py
 ```
 
-The unit tests validate lossless PNG frames and buffer bounds. The checker validates the
-manifest, framing, views, commands, input bursts, restart and shutdown. Its local patch adds the
-experimental audio manifest key and bounds each observation window, since an animated extension
-never becomes quiet. It also permits one draw already in flight when the checker closes a tab;
-the extension handles the resulting `noview` reply by releasing the view. Further draws to that
-closed view still fail. The checker deliberately does not negotiate the new key-state feature,
-exercising the legacy fallback.
+A `vVERSION` tag equal to `extension.ini` builds and tests all three targets. Only after every
+platform passes does the workflow publish a preview release with extension archives, standalone
+preview downloads, SHA-256 checksums and complete corresponding source archives. Public releases
+also receive GitHub build-provenance attestations for the extension archives.
 
-The real-editor tests verify movement, turning, ammunition use, audio mixing, time freezing
-while paused, focus changes, closing/reopening, resizing, sustained frame delivery, missing
-data, invalid data, and audio denial without the declared permission. Every test uses isolated
-config and state directories. Screenshots and logs are in `build/test-results`.
+## Game data and licenses
 
-The extension needs no document, project, home, network or terminal access. Keyboard events
-come from the focused rhun picture view. It does not install an event tap, read global keyboard
-state, or request Accessibility or Input Monitoring access.
+The repository and every binary download include the unchanged Doom 1.9 shareware IWAD. It
+contains the first episode's graphics, maps, sounds and score. It remains copyrighted by id
+Software under its [separate license and redistribution notice](data/SHAREWARE-LICENSE.txt).
+Keep it unmodified and do not charge for it without id Software's permission. No registered Doom
+or Doom II assets are included.
+
+The portable music synthesizer uses the GPL-2.0 TimGM6mb General MIDI instrument bank, included
+with its own notice. [data/README.md](data/README.md) records asset origins and checksums.
+
+The extension needs no document, project, home, network or terminal access. Keyboard events come
+from the focused picture view. Audio access is platform specific: Linux sound services can also
+expose recording, and rhun currently has no Windows extension sandbox. This extension opens
+playback streams only. It does not read global keyboard state or request Accessibility access.
 
 ## How it works
 
-DoomGeneric supplies the original engine. The extension sends indexed PNG frames through
-rhun's existing image/picture protocol, retaining only the current image. The C SDK owns all
-protocol framing. Sound effects use AudioQueue; MUS music events drive macOS's built-in MIDI
-synthesizer. This prototype has no third-party runtime dependency.
+DoomGeneric supplies the engine. Indexed PNG frames travel through rhun's image/picture protocol.
+The C SDK owns all protocol framing. Miniaudio supplies native playback and TinySoundFont renders
+the original MUS score with the bundled instruments on all three platforms.
 
-The engine and extension are GPL-2.0-or-later. The vendored rhun C SDK is MIT licensed. See
-[LICENSE](LICENSE) and [THIRD_PARTY.md](THIRD_PARTY.md).
+The engine and extension are GPL-2.0-or-later. Source for the exact release is provided in
+`doom-source.tar.gz`; the preview editor's patched source is in `rhun-preview-source.tar.gz`.
+The vendored libraries have their own notices. See [LICENSE](LICENSE) and
+[THIRD_PARTY.md](THIRD_PARTY.md).

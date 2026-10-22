@@ -29,3 +29,13 @@ https://sources.debian.org/src/doom-wad-shareware/1.9.fixed-4/debian/copyright/
 
 `sh tools/fetch-shareware.sh` restores the same WAD from the source archive and checks this
 hash. No registered Doom or Doom II data is included.
+
+## General MIDI instruments
+
+`TimGM6mb.sf2` supplies instrument samples for the original Doom MUS score on every platform.
+It is TimGM6mb 1.3 from Debian, licensed under GPL-2.0. Its editable SoundFont file is included
+unchanged with `SOUNDFONT-LICENSE.txt`; the full GPL text is in the repository's `LICENSE`.
+
+Source: https://deb.debian.org/debian/pool/main/t/timgm6mb-soundfont/timgm6mb-soundfont_1.3.orig.tar.gz
+
+SHA-256: `c5378b62028c920cb11e4803327983fee2f2cdff5dc89c708e39da417e51c854`.

@@ -3,6 +3,7 @@
 import hashlib
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -17,8 +18,14 @@ with tempfile.TemporaryDirectory(prefix='doom-install-') as folder:
     for name in ('config/rhun', 'state', 'project', 'extensions', 'tmp'):
         (w / name).mkdir(parents=True, exist_ok=True)
     (w / 'config/rhun/config').write_text('[updates]\ncheck = false\n[ui]\nsidebar = false\nagents_panel = false\n')
+    downloads = w / 'downloads'
+    downloads.mkdir()
+    local_archive = downloads / archive.name
+    shutil.copy2(archive, local_archive)
+    (downloads / 'sha256sums.txt').write_text(
+        hashlib.sha256(local_archive.read_bytes()).hexdigest() + '  ' + archive.name + '\n')
     script = w / 'install.rsc'
-    script.write_text('ext-install-archive ' + archive.as_posix() + '\nwait-install\nprint-dialog\n'
+    script.write_text('ext-install-archive ' + local_archive.as_posix() + '\nwait-install\nprint-dialog\n'
                       'dialog yes\nwait 200\ncmd doom.play\nwait 2200\nprint-views\n'
                       'print-ext-versions rhun-editor/doom\nprint-toast\nquit\n')
     env = dict(os.environ, HOME=str(w), USERPROFILE=str(w), APPDATA=str(w / 'config'),
