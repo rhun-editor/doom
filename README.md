@@ -8,13 +8,13 @@ controls, sound effects and music. Builds for macOS Apple silicon, Linux x86-64 
 ## Install in rhun
 
 Use [rhun 0.18.2 or newer](https://github.com/vshvedov/rhun/releases/latest). Open
-**Extensions → Install from GitHub…**, enter **rhun-editor/doom**, approve its audio access,
-then run **DOOM: Play** from the command palette. Click the game to play. The extension downloads
-its native binary, shareware episode and music instruments together. No compiler or extra
-runtime is required.
+**Extensions → Browse**, search **doom**, and click **Install**. Click **Refresh** if the page
+was already open. Approve its audio access, then run **DOOM: Play** from the command palette.
+Click the game to play. The extension downloads its native binary, shareware episode and music
+instruments together. No compiler or extra runtime is required.
 
-To choose the first release explicitly, enter `rhun-editor/doom@0.1.0`. It has not been
-submitted to the extension index, so the install dialog says it has not been reviewed there.
+You can also use **Install → From GitHub…** and enter `rhun-editor/doom`. To choose the first
+release explicitly, enter `rhun-editor/doom@0.1.0`.
 
 You can also download `doom-TARGET.tar.gz` from [Releases](https://github.com/rhun-editor/doom/releases)
 and use **Extensions → Install → From an Archive**. Keep `sha256sums.txt` beside the archive

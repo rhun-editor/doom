@@ -1,9 +1,10 @@
 DOOM runs in a native rhun editor tab, with the original shareware episode, sound effects and music.
 
 Install [rhun 0.18.2 or newer](https://github.com/vshvedov/rhun/releases/latest), open
-**Extensions → Install from GitHub…**, and enter **rhun-editor/doom**. Approve audio access,
-then run **DOOM: Play** from the command palette. No separate editor preview is needed.
-To select this version explicitly, enter `rhun-editor/doom@0.1.0`.
+**Extensions → Browse**, search **doom**, and click **Install**. Click **Refresh** if the page
+was already open. Approve audio access, then run **DOOM: Play** from the command palette.
+No separate editor preview is needed. You can also use **Install → From GitHub…** and enter
+`rhun-editor/doom`, or `rhun-editor/doom@0.1.0` to select this version explicitly.
 
 The extension archives include their native binary, shareware game data, music instruments and
 licenses. You can also install `doom-TARGET.tar.gz` with **From an Archive**. Keep
