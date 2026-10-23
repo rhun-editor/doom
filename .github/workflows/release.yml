@@ -45,33 +45,25 @@ jobs:
         with:
           msystem: MINGW64
           update: true
-          install: make mingw-w64-x86_64-gcc mingw-w64-x86_64-zlib mingw-w64-x86_64-llvm mingw-w64-x86_64-clang mingw-w64-x86_64-lld
+          install: make mingw-w64-x86_64-gcc
       - name: Windows tool paths
         if: runner.os == 'Windows'
         shell: msys2 {0}
         run: |
           echo "$(cygpath -m /mingw64/bin)" >> "$GITHUB_PATH"
-          echo "LLVM_BIN=$(cygpath -m /mingw64/bin)" >> "$GITHUB_ENV"
           echo "CC=$(cygpath -m /mingw64/bin/gcc.exe)" >> "$GITHUB_ENV"
-      - name: Build Unix editor and extension
+      - name: Build Unix extension
         if: runner.os != 'Windows'
         shell: bash
         run: |
           set -e
           make -s -j4
-          (cd build/rhun-host && sh build.sh release)
-          echo "DOOM_RHUN=$GITHUB_WORKSPACE/build/rhun-host/build/rhun" >> "$GITHUB_ENV"
       - name: Build Windows extension
         if: runner.os == 'Windows'
         shell: msys2 {0}
         run: make -s -j4 CC=gcc
-      - name: Build Windows editor
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          python build/rhun-host/tools/build-windows.py release
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          "DOOM_RHUN=$env:GITHUB_WORKSPACE/build/rhun-host/build/windows/rhun.exe" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Verify official editor and published DOOM downloads
+        run: python tools/fetch-rhun.py ${{ matrix.target }}
       - name: Configure test audio
         shell: bash
         run: |
@@ -95,6 +87,11 @@ jobs:
       - name: Test the packaged binary in the native editor
         env:
           DOOM_PACKAGE_ROOT: ${{ github.workspace }}/build/package/${{ matrix.target }}/doom
+        run: python tests/run.py
+      - name: Test published DOOM in the released editor
+        env:
+          DOOM_PACKAGE_ROOT: ${{ env.DOOM_PUBLISHED_ROOT }}
+          DOOM_TEST_RESULTS: build/test-results/published
         run: python tests/run.py
       - name: Protocol conformance on the package
         env:

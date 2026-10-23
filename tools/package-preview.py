@@ -59,7 +59,7 @@ def main():
     (stage / 'README.txt').write_text(
         'DOOM in rhun: separate editor preview\n\n'
         'Extract this entire folder, then run Play DOOM. No compiler or runtime is required.\n'
-        'On Linux, run ./"Play DOOM.sh". On macOS, the preview editor is not notarized.\n'
+        'On Linux, run ./"Play DOOM.sh". Use regular rhun for the notarized Mac installer.\n'
         'Your regular editor is not replaced. Preview settings stay in config/ and state/.\n'
         'Click the game. WASD move, arrows turn, Space fires, E opens doors, P pauses.\n\n'
         'The bundled editor provides paired-key and audio support.\n'

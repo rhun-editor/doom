@@ -76,8 +76,9 @@ restores a missing WAD from Debian and verifies its checksum; clones already con
 
 ## Tests and automated releases
 
-`.github/workflows/release.yml` builds on native macOS, Ubuntu and Windows runners with the
-unmodified rhun 0.18.2 source release. It runs PNG
+`.github/workflows/release.yml` builds on native macOS, Ubuntu and Windows runners. It verifies
+and uses the official rhun 0.18.2 downloads, then tests both the new extension build and the
+published DOOM 0.1.0 binary in that released editor. It runs PNG
 unit tests, protocol conformance, real-editor gameplay tests, archive installation, picture-view
 regressions and extracted-preview launcher tests. Linux and Windows also exercise their native
 window key handlers. Preview extraction tests include spaces and non-ASCII paths. Windows runs

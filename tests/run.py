@@ -19,7 +19,7 @@ BIN=PACKAGE/'bin'/BINARY
 RHUN=os.environ.get('DOOM_RHUN')
 if not RHUN and (ROOT/'.local-rhun').exists(): RHUN=(ROOT/'.local-rhun').read_text().strip()
 RHUN=RHUN or shutil.which('rhun')
-ARTIFACTS=ROOT/'build/test-results'
+ARTIFACTS=Path(os.environ.get('DOOM_TEST_RESULTS',ROOT/'build/test-results')).resolve()
 CONFIG='''[ui]
 agents_panel = false
 sidebar = false
@@ -44,7 +44,7 @@ class Gameplay(unittest.TestCase):
             self.assertRegex(out,r'confined=[12]')
 
     def run_case(self,name,actions,*,audio=True,wad='valid',audio_backend=None):
-        self.assertTrue(RHUN and Path(RHUN).is_file(),'Set DOOM_RHUN to the local patched editor executable.')
+        self.assertTrue(RHUN and Path(RHUN).is_file(),'Set DOOM_RHUN to a rhun 0.18.2 or newer executable.')
         with tempfile.TemporaryDirectory(prefix='rhun-doom-') as folder:
             w=Path(folder).resolve()
             for d in ['config/rhun','state','tmp','project','extensions/rhun-editor/doom/bin','extensions/rhun-editor/doom/data']:
