@@ -3,6 +3,8 @@
 The original Doom engine in a rhun editor tab. Native C, original 320×200 pixels, keyboard
 controls, sound effects and music. Builds for macOS Apple silicon, Linux x86-64 and Windows x64.
 
+<img width="1672" height="941" alt="rhun-doom-title" src="https://github.com/user-attachments/assets/d1d1eb19-e3a5-4a91-a184-c5215934cf40" />
+
 ![DOOM running in a rhun tab](docs/doom-in-rhun.png)
 
 ## Install in rhun
